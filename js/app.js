@@ -1,1378 +1,2736 @@
-<script>
-console.log("app carregado")
+// Dashboard Loppiano — app.js consolidado
+// Versão limpa: sem Comandas, sem duplicações, com Dia da Semana e Horário em subtabs.
 
-
-let DATA={diario:[],modo_venda:[],horario:[],atendente:[],grupos:[],produtos:[],comandas:[],notas:[],cardapio:[]};
-let SORT={dia:{col:'data',dir:-1},canais:{col:'periodo',dir:-1},horario:{col:'total_real',dir:-1},garcons:{col:'valor_total',dir:-1},grupos:{col:'faturado',dir:-1},produtos:{col:'valor',dir:-1},comandas:{col:'total',dir:-1}};
-let FILTER_DOW='',FILTER_CANAL='',FILTER_PROD_TAM='',FILTER_PROD_GRUPO='';
-let geralMetric='fat',geralYoyActive=false,diaYoyActive=false;
-let geralMainInst=null,geralCanalInst=null,canaisInst=null,dowChartInst=null,horarioLineInst=null;
-let gpfFatInst=null,gpfItensInst=null,gscFatInst=null,gscItensInst=null;
-let cardapioSubTab='grupos',cardapioTamFiltro='';
-let garconAtivo=null;
-
-// FORMATTERS
-const fmtBRL=v=>v!=null?'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
-const fmtNum=v=>v!=null?Number(v).toLocaleString('pt-BR'):'—';
-const fmtPct=v=>v!=null?Number(v).toFixed(1)+'%':'—';
-const MESES_PT=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
-const MESES_LABEL=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-const DIAS_PT=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-const DOW_CLASS={Dom:'dow-dom',Seg:'dow-seg',Ter:'dow-ter',Qua:'dow-qua',Qui:'dow-qui',Sex:'dow-sex','Sáb':'dow-sab'};
-const CEO={red:'#C0392B',green:'#4A7C59',black:'#0D0D0D',teal:'#2E7D62',amber:'#B7791F'};
-const HORA_COLORS=['#1E40AF','#065F46','#92400E','#C0392B','#5B21B6','#0F6E56','#374151','#B7791F','#185FA5','#4A7C59','#991B1B','#3C3489','#2E7D62','#633806'];
-// Horário de funcionamento real
-// Delivery: Dom-Qui 15h-22h30 / Sex-Sáb 15h-23h
-// Salão: Dom-Qui 17h-22h30 / Sex-Sáb 17h-23h
-const HORAS_FUNC=[15,16,17,18,19,20,21,22,23];
-const HORA_INFO={
-  15:{label:'15:00',delivery:true,salao:false,obs:'Delivery only'},
-  16:{label:'16:00',delivery:true,salao:false,obs:'Delivery only'},
-  17:{label:'17:00',delivery:true,salao:true,obs:''},
-  18:{label:'18:00',delivery:true,salao:true,obs:''},
-  19:{label:'19:00',delivery:true,salao:true,obs:''},
-  20:{label:'20:00',delivery:true,salao:true,obs:''},
-  21:{label:'21:00',delivery:true,salao:true,obs:''},
-  22:{label:'22:00',delivery:true,salao:true,obs:''},
-  23:{label:'23:00',delivery:true,salao:false,obs:'Sex/Sáb only'},
-};
-const DOW_COLORS={Seg:'#1E40AF',Ter:'#065F46',Qua:'#374151',Qui:'#991B1B',Sex:'#92400E','Sáb':'#C0392B',Dom:'#5B21B6'};
-
-function getDow(d){if(!d)return'—';const dt=new Date(d+'T12:00:00');return DIAS_PT[dt.getDay()];}
-function isIfood(nome){return nome&&(nome.toLowerCase().includes('ifood')||nome.toLowerCase().includes('iFood'));}
-
-async function fetchAll(table,limit=30000){
-  const r=await fetch(`${SUPA_URL}/rest/v1/${table}?select=*&limit=${limit}`,{headers:HEADERS});
-  if(!r.ok)return[];
-  return r.json();
+let DATA = {
+ resumo_mensal: [],
+ horarios: [],
+ garcons: [],
+ produtos: [],
+ vendas_diarias: []
 }
 
-function showTab(tab){
-  const tabs=['geral','dia','canais','horario','garcons','cardapio','comandas','comparar'];
-  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===tab));
-  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
-  document.getElementById(`sec-${tab}`).classList.add('active');
+let filtroPeriodo = 'todos'
+
+// Filtros próprios por aba.
+// Quando estiver como "todos", a aba mostra todos os períodos disponíveis daquela base.
+let filtroMetas = 'todos'
+let filtroDiaSemana = 'todos'
+let filtroCanais = 'todos'
+let filtroHorario = 'todos'
+let filtroGarcons = 'todos'
+let filtroCardapio = 'todos'
+let filtroInsights = 'todos'
+
+let produtoSubaba = 'categoria'
+let garcomPerfilSelecionado = ''
+
+let chartMetas = null
+let chartCanais = null
+let chartCanaisLinha = null
+let chartCanaisPizza = null
+let chartHorarioFat = null
+let chartHorarioPessoas = null
+let chartHoraDetalheFat = null
+let chartHoraDetalhePessoas = null
+let chartGarconsRanking = null
+let chartGarconsEvolucao = null
+let chartProdutosRanking = null
+let chartProdutosTamanho = null
+let chartDiaSemanaFat = null
+let chartDiaSemanaComparativo = null
+let chartDiaSemanaTicket = null
+let chartDiaDetalheFat = null
+let chartDiaDetalhePessoas = null
+let chartMetaDiariaFat = null
+let chartMetaDiariaComparativo = null
+let chartMetaDiariaPessoas = null
+let chartMetaCanaisPizza = null
+let chartMetaCanaisBar = null
+let chartHistoricoFat = null
+let chartHistoricoMeta = null
+let chartPerfilGarcom = null
+let chartPerfilGarcomPizza = null
+let chartGarcomCrescimento = null
+let chartGarcomParticipacao = null
+let chartCompararFat = null
+let chartCompararPessoas = null
+
+const $ = id => document.getElementById(id)
+
+const fmtBRL = valor =>
+ Number(valor || 0).toLocaleString('pt-BR', {
+ style: 'currency',
+ currency: 'BRL'
+ })
+
+const fmtNum = valor =>
+ Number(valor || 0).toLocaleString('pt-BR')
+
+const fmtPct = valor =>
+ `${(Number(valor || 0) * 100).toFixed(1)}%`
+
+function periodoParaOrdem(periodo) {
+ if (!periodo) return 0
+
+ if (String(periodo).includes('/')) {
+ const [mes, ano] = String(periodo).split('/')
+ return Number(ano) * 100 + Number(mes)
+ }
+
+ const meses = {
+ JAN: 1, FEV: 2, MAR: 3, ABR: 4, MAI: 5, JUN: 6,
+ JUL: 7, AGO: 8, SET: 9, OUT: 10, NOV: 11, DEZ: 12
+ }
+
+ const txt = String(periodo).toUpperCase()
+ const mes = txt.slice(0, 3)
+ const ano = Number(`20${txt.slice(3, 5)}`)
+
+ return ano * 100 + (meses[mes] || 0)
 }
 
-// PERÍODO UTILS — diario usa MM/YYYY, resto usa JANXX
-function sortPeriodosMV(arr){
-  const MES_ORDER=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
-  return[...arr].sort((a,b)=>{
-    const ma=a.slice(0,3).toUpperCase(),ya=a.slice(3);
-    const mb=b.slice(0,3).toUpperCase(),yb=b.slice(3);
-    const ya2=ya.length===2?'20'+ya:ya,yb2=yb.length===2?'20'+yb:yb;
-    return Number(ya2)-Number(yb2)||MES_ORDER.indexOf(ma)-MES_ORDER.indexOf(mb);
-  });
-}
-function sortPeriodosDiario(arr){
-  return[...arr].sort((a,b)=>{const[ma,ya]=a.split('/');const[mb,yb]=b.split('/');return Number(ya)-Number(yb)||Number(ma)-Number(mb);});
-}
-function mvToLabel(p){return p.slice(0,3)+'/'+p.slice(3);}
-function diarioToLabel(p){const[m,y]=p.split('/');return MESES_LABEL[Number(m)-1]+'/'+y.slice(2);}
-function diarioToMV(p){const[m,y]=p.split('/');return MESES_PT[Number(m)-1]+y.slice(2);}
-function mvToDiario(p){const mn=MESES_PT.indexOf(p.slice(0,3).toUpperCase())+1;const y='20'+p.slice(3);return String(mn).padStart(2,'0')+'/'+y;}
+function converterPeriodoParaMMYYYY(periodo) {
+ const meses = {
+ JAN: '01', FEV: '02', MAR: '03', ABR: '04', MAI: '05', JUN: '06',
+ JUL: '07', AGO: '08', SET: '09', OUT: '10', NOV: '11', DEZ: '12'
+ }
 
-function populatePeriodsMV(id,arr){
-  const sel=document.getElementById(id);if(!sel)return;
-  const cur=sel.value;
-  const opts=sortPeriodosMV([...new Set(arr.filter(Boolean))]);
-  sel.innerHTML='<option value="">Todos os períodos</option>'+opts.map(p=>`<option value="${p}"${p===cur?' selected':''}>${mvToLabel(p)}</option>`).join('');
-}
-function populatePeriodsDiario(id){
-  const sel=document.getElementById(id);if(!sel)return;
-  const cur=sel.value;
-  const opts=sortPeriodosDiario([...new Set(DATA.diario.map(d=>d.periodo).filter(Boolean))]);
-  sel.innerHTML='<option value="">Todos os meses</option>'+opts.map(p=>`<option value="${p}"${p===cur?' selected':''}>${diarioToLabel(p)}</option>`).join('');
+ if (!periodo) return ''
+
+ const txt = String(periodo).toUpperCase()
+ const mes = txt.slice(0, 3)
+ const ano = txt.slice(3, 5)
+
+ return `${meses[mes] || '01'}/20${ano}`
 }
 
-function sortTable(tab,col){
-  SORT[tab].dir=SORT[tab].col===col?SORT[tab].dir*-1:-1;SORT[tab].col=col;
-  ({dia:renderDia,canais:renderCanais,horario:renderHorario,garcons:renderGarcons,grupos:renderCardapio,produtos:renderProdutos,comandas:renderComandas}[tab]||renderCardapio)();
-}
-function getSorted(tab,rows){
-  const{col,dir}=SORT[tab];
-  return[...rows].sort((a,b)=>{const va=a[col],vb=b[col];if(va==null)return 1;if(vb==null)return-1;if(typeof va==='string')return dir*va.localeCompare(vb,'pt');return dir*(Number(va)-Number(vb));});
-}
-function updateSortIcons(tab){
-  const secId=tab==='grupos'||tab==='produtos'?'cardapio':tab;
-  document.querySelectorAll(`#sec-${secId} thead th`).forEach(th=>{
-    const col=th.dataset.col;if(!col)return;
-    th.classList.toggle('sorted',col===SORT[tab].col);
-    const icon=th.querySelector('.sort-icon');
-    if(icon)icon.textContent=col===SORT[tab].col?(SORT[tab].dir===1?' ↑':' ↓'):' ↕';
-  });
+function periodoEquivalente(valorA, valorB) {
+ if (!valorA || !valorB) return false
+
+ const a = String(valorA).trim().toUpperCase()
+ const b = String(valorB).trim().toUpperCase()
+
+ if (a === b) return true
+
+ return converterPeriodoParaMMYYYY(a) === b ||
+ converterPeriodoParaMMYYYY(b) === a
 }
 
-function updateClearBtn(id,isFiltered){const btn=document.getElementById(id);if(btn)btn.style.display=isFiltered?'inline-block':'none';}
+function periodoParaLabel(periodo) {
+ if (!periodo) return ''
 
-function toggleCollapse(wrapId,btnId,labelOpen,labelClose){
-  const wrap=document.getElementById(wrapId);
-  const btn=document.getElementById(btnId);
-  if(!wrap)return;
-  const open=wrap.style.display==='none';
-  wrap.style.display=open?'block':'none';
-  if(btn)btn.textContent=(open?'▼ ':' ▶ ')+(open?labelClose:labelOpen);
+ const texto = String(periodo).trim().toUpperCase()
+
+ if (texto.includes('/')) {
+ const [mes, ano] = texto.split('/')
+ return `${mes.padStart(2, '0')}/${ano}`
+ }
+
+ return texto
 }
 
-// NOTAS
-function getNotas(ctx){return DATA.notas.filter(n=>n.contexto===ctx&&n.ativo);}
-function getNotasGarcon(nome){return DATA.notas.filter(n=>n.contexto==='garcon'&&n.periodo===nome&&n.ativo);}
-function renderNotasCards(notas){
-  if(!notas||!notas.length)return'';
-  const icons={destaque:'✨',alerta:'⚠️',aviso:'📌',observacao:'💬'};
-  return`<div class="notas-wrap">${notas.map(n=>`<div class="nota-card ${n.tag||'observacao'}"><span class="nota-icon">${icons[n.tag]||'💬'}</span><div><div class="nota-periodo">${n.periodo}</div><div class="nota-texto">${n.texto}</div></div></div>`).join('')}</div>`;
-}
-function renderTodasNotas(){
-  ['geral','dia','canais','horario','garcons','cardapio','comandas','comparar'].forEach(ctx=>{
-    const el=document.getElementById(`notas-${ctx}`);
-    if(el)el.innerHTML=renderNotasCards(getNotas(ctx));
-  });
+function listarPeriodosBase(lista) {
+ return [...new Set((lista || [])
+ .map(item => item.periodo)
+ .filter(Boolean))]
+ .sort((a, b) => periodoParaOrdem(a) - periodoParaOrdem(b))
 }
 
-// ============================================================
-// VISÃO GERAL
-// ============================================================
-function buildGeralData(){
-  let byMes={};
-  DATA.diario.forEach(d=>{
-    if(!byMes[d.periodo])byMes[d.periodo]={fat:0,pessoas:0,cnt:0,tk_sum:0};
-    byMes[d.periodo].fat+=Number(d.fat_real)||0;
-    byMes[d.periodo].pessoas+=Number(d.pessoas)||0;
-    byMes[d.periodo].cnt++;
-    byMes[d.periodo].tk_sum+=Number(d.ticket)||0;
-  });
-  return sortPeriodosDiario(Object.keys(byMes)).map(m=>({
-    mes:m,...byMes[m],
-    ticket:byMes[m].cnt>0?byMes[m].tk_sum/byMes[m].cnt:0
-  }));
+function periodoMaisRecente(lista) {
+  const periodos = listarPeriodosBase(lista)
+  return periodos.length ? periodos.at(-1) : 'todos'
 }
 
-function geralSwitch(metric,btn){
-  geralMetric=metric;
-  document.querySelectorAll('.ceo-mtab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  renderGeralMainChart();
-}
-function toggleGeralYoY(){
-  geralYoyActive=!geralYoyActive;
-  document.getElementById('geral-yoyBtn').classList.toggle('active',geralYoyActive);
-  renderGeralMainChart();
+function periodoAnterior(periodo, listaReferencia) {
+  const periodos = listarPeriodosBase(listaReferencia)
+  const idx = periodos.findIndex(p => periodoEquivalente(p, periodo))
+
+  if (idx > 0) return periodos[idx - 1]
+
+  return null
 }
 
-function getGeralVal(d,metric){
-  if(metric==='fat') return d.fat;
-  if(metric==='pessoas') return d.pessoas;
-  if(metric==='ticket') return d.ticket;
-  if(metric==='pedidos'){
-    // pedidos delivery por período diario → buscar em modo_venda
-    const mvKey=diarioToMV(d.mes);
-    const delRow=DATA.modo_venda.find(r=>r.periodo===mvKey&&r.canal==='Delivery');
-    return delRow?Number(delRow.qtd_atend)||0:0;
-  }
-  return d.fat;
+function diasNoMesDoPeriodo(periodo) {
+  const mmYYYY = String(periodo || '').includes('/')
+    ? String(periodo)
+    : converterPeriodoParaMMYYYY(periodo)
+
+  const [mes, ano] = mmYYYY.split('/').map(Number)
+
+  if (!mes || !ano) return 30
+
+  return new Date(ano, mes, 0).getDate()
 }
 
-function renderGeralKpis(){
-  const dados=buildGeralData();
-  const ultMes=dados[dados.length-1];
-  const penMes=dados.length>1?dados[dados.length-2]:null;
-  if(!ultMes)return;
+function getResumoMetaPorPeriodo(periodo) {
+  const resumo = DATA.resumo_mensal || []
 
-  const fat=ultMes.fat,pess=ultMes.pessoas,tk=ultMes.ticket;
-  const delRow=DATA.modo_venda.find(r=>r.periodo===diarioToMV(ultMes.mes)&&r.canal==='Delivery');
-  const salRow=DATA.modo_venda.find(r=>r.periodo===diarioToMV(ultMes.mes)&&r.canal==='Salão');
-  const delFat=delRow?Number(delRow.fat_real)||0:0;
-  const salFat=salRow?Number(salRow.fat_real)||0:0;
-
-  const delta=(cur,prev)=>prev>0?((cur-prev)/prev*100):null;
-  const deltaHtml=(d)=>{if(d===null)return'';const isUp=d>0;return`<div class="kpi-delta ${isUp?'up':'dn'}">${isUp?'↑':'↓'} ${Math.abs(d).toFixed(1)}% vs mês ant.</div>`;};
-
-  let fatDelta=null,pessDelta=null,tkDelta=null;
-  if(penMes){
-    fatDelta=delta(fat,penMes.fat);
-    pessDelta=delta(pess,penMes.pessoas);
-    tkDelta=delta(tk,penMes.ticket);
-  }
-
-  const [m,y]=ultMes.mes.split('/');
-  const label=MESES_LABEL[Number(m)-1]+'/'+y;
-
-  document.getElementById('geral-kpis').innerHTML=`
-    <div class="ceo-kpi red"><div class="ceo-kpi-l">Fat. Real — ${label}</div><div class="ceo-kpi-v red">${fmtBRL(fat)}</div><div class="ceo-kpi-s">${fmtBRL(ultMes.fat/ultMes.cnt)} por dia</div>${deltaHtml(fatDelta)}</div>
-    <div class="ceo-kpi green"><div class="ceo-kpi-l">Pessoas Salão — ${label}</div><div class="ceo-kpi-v green">${fmtNum(pess)}</div><div class="ceo-kpi-s">no mês</div>${deltaHtml(pessDelta)}</div>
-    <div class="ceo-kpi teal"><div class="ceo-kpi-l">Ticket Médio — ${label}</div><div class="ceo-kpi-v">${fmtBRL(tk)}</div><div class="ceo-kpi-s">média do mês</div>${deltaHtml(tkDelta)}</div>
-    <div class="ceo-kpi amber"><div class="ceo-kpi-l">Delivery vs Salão</div><div class="ceo-kpi-v">${fmtPct(delFat/(delFat+salFat||1)*100)}</div><div class="ceo-kpi-s">${fmtPct(salFat/(delFat+salFat||1)*100)} salão</div></div>`;
-
-  document.getElementById('hdrBadgeSalao').textContent=`Salão: ${fmtBRL(salFat)}`;
-  document.getElementById('hdrBadgeDelivery').textContent=`Delivery: ${fmtBRL(delFat)}`;
+  return resumo.find(r =>
+    periodoEquivalente(r.periodo, periodo)
+  ) || null
 }
 
-function renderGeralMainChart(){
-  const dados=buildGeralData();
-  const labels=dados.map(d=>diarioToLabel(d.mes));
-  const vals=dados.map(d=>geralMetric==='pedidos'?getGeralVal(d,'pedidos'):geralMetric==='fat'?d.fat:geralMetric==='pessoas'?d.pessoas:d.ticket);
-  const maxV=Math.max(...vals.filter(v=>v!=null))||1;
-  const barColors=vals.map(v=>v===maxV?CEO.red:CEO.black);
-  const titles={fat:'Faturamento real mensal (R$)',pessoas:'Pessoas no salão por mês',pedidos:'Pedidos delivery por mês',ticket:'Ticket médio por mês (R$)'};
-  document.getElementById('geral-mainTitle').textContent=titles[geralMetric];
-  document.getElementById('geral-yoyLegend').style.display=geralYoyActive?'flex':'none';
 
-  const datasets=[{data:vals,backgroundColor:barColors,borderRadius:4,borderSkipped:false,label:'Atual',order:2}];
 
-  let yoyVals=null;
-  if(geralYoyActive){
-    yoyVals=dados.map(d=>{
-      const[m,y]=d.mes.split('/');const prevY=String(Number(y)-1);const prevM=m+'/'+prevY;
-      const prev=DATA.diario.filter(r=>r.periodo===prevM);
-      if(!prev.length)return null;
-      if(geralMetric==='fat') return prev.reduce((s,r)=>s+(Number(r.fat_real)||0),0);
-      if(geralMetric==='pessoas') return prev.reduce((s,r)=>s+(Number(r.pessoas)||0),0);
-      if(geralMetric==='ticket') return prev.length?prev.reduce((s,r)=>s+(Number(r.ticket)||0),0)/prev.length:null;
-      if(geralMetric==='pedidos'){
-        const prevMV=diarioToMV(prevM);
-        const row=DATA.modo_venda.find(r=>r.periodo===prevMV&&r.canal==='Delivery');
-        return row?Number(row.qtd_atend)||0:null;
-      }
-      return null;
-    });
-    // Linha do ciclo anterior — padrão Calçada Alta
-    datasets.push({
-      type:'line',label:'Ano anterior',data:yoyVals,
-      borderColor:CEO.amber,backgroundColor:'transparent',
-      borderWidth:2,tension:.3,fill:false,
-      pointRadius:3,pointBackgroundColor:CEO.amber,
-      pointHoverRadius:6,order:1,
-    });
-  }
+function montarFiltroPeriodoAba(idSelect, periodos, valorAtual, onChange) {
+ const select = $(idSelect)
+ if (!select) return
 
-  // Cards YoY
-  const yoyDiv=document.getElementById('geral-yoyCards');
-  if(geralYoyActive&&yoyVals){
-    const fmt=geralMetric==='pessoas'||geralMetric==='pedidos'?fmtNum:fmtBRL;
-    const cards=dados.map((d,i)=>{
-      const cur=vals[i],prev=yoyVals[i];if(prev==null||prev===0)return null;
-      const delta=prev>0?(cur-prev)/prev*100:0;
-      const isUp=delta>0;const color=isUp?'#16A34A':delta<0?'#DC2626':'var(--ink3)';
-      const[m,y]=d.mes.split('/');
-      return`<div class="yoy-card"><div class="yoy-card-label">${MESES_LABEL[Number(m)-1]}/${y.slice(2)}</div><div class="yoy-card-delta" style="color:${color}">${isUp?'↑':'↓'} ${Math.abs(delta).toFixed(1)}%</div><div class="yoy-card-vals">${fmt(cur)} vs ${fmt(prev)}</div></div>`;
-    }).filter(Boolean);
-    yoyDiv.innerHTML=cards.length?cards.join(''):'<div style="font-size:12px;color:var(--ink3)">Sem dados do ano anterior para comparar ainda.</div>';
-    yoyDiv.style.display='flex';yoyDiv.style.flexWrap='wrap';
-  }else{yoyDiv.style.display='none';}
+ const normalizados = [...new Set((periodos || []).filter(Boolean))]
+ .sort((a, b) => periodoParaOrdem(a) - periodoParaOrdem(b))
 
-  const isMoney=geralMetric==='fat'||geralMetric==='ticket';
-  if(geralMainInst)geralMainInst.destroy();
-  geralMainInst=new Chart(document.getElementById('geralMainChart'),{
-    type:'bar',
-    data:{labels,datasets},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:ctx=>isMoney?`${ctx.dataset.label}: ${fmtBRL(ctx.raw)}`:`${ctx.dataset.label}: ${fmtNum(ctx.raw)}`}}},
-      scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,.05)'},ticks:{callback:v=>isMoney?'R$'+Math.round(v/1000)+'k':fmtNum(v)}}}}
-  });
+ const assinatura = normalizados.join('|')
+
+ if (select.dataset.assinatura !== assinatura) {
+ select.innerHTML = `
+ <option value="todos">Todos os períodos</option>
+ ${normalizados.map(p => `
+ <option value="${p}">
+ ${periodoParaLabel(p)}
+ </option>
+ `).join('')}
+ `
+
+ select.dataset.assinatura = assinatura
+ }
+
+ if ([...select.options].some(opt => opt.value === valorAtual)) {
+ select.value = valorAtual
+ } else {
+ select.value = 'todos'
+ }
+
+ select.onchange = e => {
+ onChange(e.target.value)
+ }
 }
 
-function renderGeralCanalCards(){
-  const del=DATA.modo_venda.filter(d=>d.canal==='Delivery');
-  const sal=DATA.modo_venda.filter(d=>d.canal==='Salão');
-  const dF=del.reduce((s,d)=>s+(Number(d.fat_real)||0),0);
-  const sF=sal.reduce((s,d)=>s+(Number(d.fat_real)||0),0);
-  const tot=dF+sF||1;
-  const dTk=del.length?del.reduce((s,d)=>s+(Number(d.ticket_medio)||0),0)/del.length:0;
-  const sTk=sal.length?sal.reduce((s,d)=>s+(Number(d.ticket_medio)||0),0)/sal.length:0;
-  const dPed=del.reduce((s,d)=>s+(Number(d.qtd_atend)||0),0);
-  const sPess=sal.reduce((s,d)=>s+(Number(d.pessoas)||0),0);
-  const sCmd=sal.reduce((s,d)=>s+(Number(d.qtd_atend)||0),0);
-  document.getElementById('geral-canal-cards').innerHTML=`
-    <div class="canal-card delivery">
-      <div class="canal-name delivery">🚗 Delivery</div>
-      <div class="canal-fat" style="color:var(--red)">${fmtBRL(dF)}</div>
-      <div class="canal-pct">${fmtPct(dF/tot*100)} do faturamento total</div>
-      <div class="canal-stat-row">
-        <div><div class="cstat-l">Pedidos total</div><div class="cstat-v">${fmtNum(dPed)}</div></div>
-        <div><div class="cstat-l">Ticket médio</div><div class="cstat-v">${fmtBRL(dTk)}</div></div>
-        <div><div class="cstat-l">Meses</div><div class="cstat-v">${del.length}</div></div>
-      </div>
-    </div>
-    <div class="canal-card salao">
-      <div class="canal-name salao">🍽 Salão</div>
-      <div class="canal-fat" style="color:var(--green)">${fmtBRL(sF)}</div>
-      <div class="canal-pct">${fmtPct(sF/tot*100)} do faturamento total</div>
-      <div class="canal-stat-row">
-        <div><div class="cstat-l">Pessoas</div><div class="cstat-v">${fmtNum(sPess)}</div></div>
-        <div><div class="cstat-l">Comandas</div><div class="cstat-v">${fmtNum(sCmd)}</div></div>
-        <div><div class="cstat-l">Ticket médio</div><div class="cstat-v">${fmtBRL(sTk)}</div></div>
-      </div>
-    </div>`;
+function montarFiltrosPorAba() {
+ montarFiltroPeriodoAba(
+ 'periodoMetas',
+ listarPeriodosBase(DATA.resumo_mensal),
+ filtroMetas,
+ valor => {
+ filtroMetas = valor
+ renderTudo()
+ }
+ )
+
+ montarFiltroPeriodoAba(
+ 'periodoDiaSemana',
+ listarPeriodosBase(DATA.vendas_diarias),
+ filtroDiaSemana,
+ valor => {
+ filtroDiaSemana = valor
+
+ if ($('selectDiaSemana')) {
+ $('selectDiaSemana').dataset.loaded = ''
+ }
+
+ renderAbaDiaSemana()
+ renderDiaSemanaDetalhe()
+ }
+ )
+
+ montarFiltroPeriodoAba(
+ 'periodoCanais',
+ listarPeriodosBase(DATA.resumo_mensal),
+ filtroCanais,
+ valor => {
+ filtroCanais = valor
+ renderAbaCanais(getDadosCanaisFiltrados())
+ }
+ )
+
+ montarFiltroPeriodoAba(
+ 'periodoHorario',
+ listarPeriodosBase(DATA.horarios),
+ filtroHorario,
+ valor => {
+ filtroHorario = valor
+
+ if ($('selectHora')) {
+ $('selectHora').dataset.loaded = ''
+ }
+
+ renderAbaHorario()
+ renderHoraDetalhe()
+ }
+ )
+
+ montarFiltroPeriodoAba(
+ 'periodoGarcons',
+ listarPeriodosBase(DATA.garcons),
+ filtroGarcons,
+ valor => {
+ filtroGarcons = valor
+
+ if ($('selectGarcomPerfil')) {
+ $('selectGarcomPerfil').dataset.loaded = ''
+ }
+
+ garcomPerfilSelecionado = ''
+
+ renderAbaGarcons()
+ renderPerfilGarcom()
+ renderGarconsCrescimento()
+ }
+ )
+
+ montarFiltroPeriodoAba(
+ 'periodoCardapio',
+ listarPeriodosBase(DATA.produtos),
+ filtroCardapio,
+ valor => {
+ filtroCardapio = valor
+
+ if ($('selectProdutoCrescimento')) {
+ $('selectProdutoCrescimento').dataset.loaded = ''
+ }
+
+ renderAbaProdutos()
+ }
+ )
+
+ montarFiltroPeriodoAba(
+ 'periodoInsights',
+ listarPeriodosBase(DATA.resumo_mensal),
+ filtroInsights,
+ valor => {
+ filtroInsights = valor
+ renderInsightsGerais()
+ }
+ )
 }
 
-function renderGeralCanalChart(){
-  const periodos=sortPeriodosMV([...new Set(DATA.modo_venda.map(d=>d.periodo))]);
-  const labels=periodos.map(mvToLabel);
-  const dD=periodos.map(p=>{const r=DATA.modo_venda.find(d=>d.periodo===p&&d.canal==='Delivery');return r?Number(r.fat_real):0;});
-  const sD=periodos.map(p=>{const r=DATA.modo_venda.find(d=>d.periodo===p&&d.canal==='Salão');return r?Number(r.fat_real):0;});
-  if(geralCanalInst)geralCanalInst.destroy();
-  geralCanalInst=new Chart(document.getElementById('geralCanalChart'),{
-    type:'line',data:{labels,datasets:[
-      {label:'Delivery',data:dD,borderColor:CEO.red,backgroundColor:CEO.red+'22',borderWidth:2,tension:.3,fill:false,pointRadius:3,pointHoverRadius:6},
-      {label:'Salão',data:sD,borderColor:CEO.green,backgroundColor:CEO.green+'22',borderWidth:2,tension:.3,fill:false,pointRadius:3,pointHoverRadius:6}
-    ]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmtBRL(ctx.raw)}`}}},
-    scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,.05)'},ticks:{callback:v=>'R$'+Math.round(v/1000)+'k'}}}}
-  });
+function formatarDataBR(dataISO) {
+ if (!dataISO) return '—'
+ const data = new Date(`${dataISO}T12:00:00`)
+ return data.toLocaleDateString('pt-BR')
 }
 
-function renderGeralTable(){
-  const dados=buildGeralData();
-  const maxFat=Math.max(...dados.map(d=>d.fat));
-  let html=`<thead><tr><th style="text-align:left">Mês</th><th>Fat. Real</th><th>Pessoas</th><th>Ticket</th><th>Delivery</th><th>Salão</th><th>% Del.</th></tr></thead><tbody>`;
-  dados.forEach(d=>{
-    const[m,y]=d.mes.split('/');const label=MESES_LABEL[Number(m)-1]+'/'+y;
-    const mvKey=diarioToMV(d.mes);
-    const mvDel=DATA.modo_venda.find(mv=>mv.periodo===mvKey&&mv.canal==='Delivery');
-    const mvSal=DATA.modo_venda.find(mv=>mv.periodo===mvKey&&mv.canal==='Salão');
-    const dF=mvDel?Number(mvDel.fat_real):null;const sF=mvSal?Number(mvSal.fat_real):null;
-    const tot=(dF||0)+(sF||0)||1;
-    html+=`<tr class="${d.fat===maxFat?'highlight-red':''}"><td>${label}</td><td style="font-weight:500">${fmtBRL(d.fat)}</td><td>${fmtNum(d.pessoas)}</td><td>${fmtBRL(d.ticket)}</td><td>${dF?fmtBRL(dF):'—'}</td><td>${sF?fmtBRL(sF):'—'}</td><td>${dF?fmtPct(dF/tot*100):'—'}</td></tr>`;
-  });
-  const af=dados.reduce((s,d)=>s+d.fat,0)/dados.length;
-  const ap=dados.reduce((s,d)=>s+d.pessoas,0)/dados.length;
-  const at=dados.reduce((s,d)=>s+d.ticket,0)/dados.length;
-  html+=`<tr class="avg-row"><td>Média mensal</td><td>${fmtBRL(af)}</td><td>${fmtNum(Math.round(ap))}</td><td>${fmtBRL(at)}</td><td>—</td><td>—</td><td>—</td></tr></tbody>`;
-  document.getElementById('geral-tbl').innerHTML=html;
+function normalizarHora(valor) {
+ const texto = String(valor ?? '')
+ .toLowerCase()
+ .replace('h', '')
+ .split(':')[0]
+ .trim()
+
+ return Number(texto)
 }
 
-function renderGeral_disabled(){renderGeralKpis();renderGeralCanalCards();renderGeralMainChart();renderGeralCanalChart();renderGeralTable();}
-
-// ============================================================
-// POR DIA
-// ============================================================
-function filterDow(dow,btn){FILTER_DOW=dow;document.querySelectorAll('#filter-dow .filter-btn').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderDia();}
-function clearDia(){document.getElementById('sel-dia').value='';FILTER_DOW='';document.querySelectorAll('#filter-dow .filter-btn').forEach((b,i)=>b.classList.toggle('on',i===0));renderDia();}
-function toggleDiaYoY(){diaYoyActive=!diaYoyActive;document.getElementById('dia-yoyBtn').classList.toggle('active',diaYoyActive);renderDia();}
-
-function renderDia(){
-  const p=document.getElementById('sel-dia').value;
-  let rows=DATA.diario.filter(d=>{const mp=p?d.periodo===p:true;const md=FILTER_DOW?getDow(d.data)===FILTER_DOW:true;return mp&&md;}).map(d=>({...d,dow:getDow(d.data)}));
-  updateClearBtn('clear-dia',p||FILTER_DOW);
-  const sorted=getSorted('dia',rows);updateSortIcons('dia');
-  const totFat=rows.reduce((s,d)=>s+(Number(d.fat_real)||0),0);
-  const totPess=rows.reduce((s,d)=>s+(Number(d.pessoas)||0),0);
-  const tkMed=rows.length>0?rows.reduce((s,d)=>s+(Number(d.ticket)||0),0)/rows.length:0;
-  const maxFat=Math.max(...rows.map(d=>Number(d.fat_real)||0),1);
-  document.getElementById('kpi-dia').innerHTML=`
-    <div class="kpi red"><div class="kpi-l">Fat. Real Total</div><div class="kpi-v red">${fmtBRL(totFat)}</div><div class="kpi-s">${rows.length} dias</div></div>
-    <div class="kpi"><div class="kpi-l">Total Pessoas</div><div class="kpi-v">${fmtNum(totPess)}</div><div class="kpi-s">no salão</div></div>
-    <div class="kpi green"><div class="kpi-l">Ticket Médio</div><div class="kpi-v green">${fmtBRL(tkMed)}</div><div class="kpi-s">média dos dias</div></div>
-    <div class="kpi teal"><div class="kpi-l">Melhor Dia</div><div class="kpi-v">${fmtBRL(maxFat)}</div><div class="kpi-s">pico do período</div></div>`;
-  renderDowChart(rows);
-  renderDowCards(rows);
-  // YoY
-  if(diaYoyActive&&p){
-    const[m,y]=p.split('/');const prevY=String(Number(y)-1);const prevP=m+'/'+prevY;
-    const cur=rows;const prev=DATA.diario.filter(d=>d.periodo===prevP);
-    const yoyDiv=document.getElementById('dia-yoyCards');
-    if(!prev.length){yoyDiv.innerHTML='<div style="font-size:12px;color:var(--ink3)">Sem dados do mesmo mês no ano anterior.</div>';yoyDiv.style.display='flex';return;}
-    const sum=(rs,key)=>rs.reduce((s,d)=>s+(Number(d[key])||0),0);
-    const avg=(rs,key)=>rs.length?sum(rs,key)/rs.length:0;
-    const delta=(a,b)=>b>0?(a-b)/b*100:0;
-    const card=(label,a,b,fmt)=>{const d=delta(a,b);const isUp=d>0;const color=isUp?'#16A34A':d<0?'#DC2626':'var(--ink3)';return`<div class="yoy-card"><div class="yoy-card-label">${label}</div><div class="yoy-card-delta" style="color:${color}">${isUp?'↑':'↓'} ${Math.abs(d).toFixed(1)}%</div><div class="yoy-card-vals">${fmt(a)} vs ${fmt(b)}</div></div>`;};
-    yoyDiv.innerHTML=[card('Fat. Real',sum(cur,'fat_real'),sum(prev,'fat_real'),fmtBRL),card('Pessoas',sum(cur,'pessoas'),sum(prev,'pessoas'),fmtNum),card('Ticket Médio',avg(cur,'ticket'),avg(prev,'ticket'),fmtBRL),card('Dias',cur.length,prev.length,fmtNum)].join('');
-    yoyDiv.style.display='flex';
-  }else{document.getElementById('dia-yoyCards').style.display='none';}
-  document.getElementById('body-dia').innerHTML=sorted.map(d=>{const isPeak=Number(d.fat_real)===maxFat;const dc=DOW_CLASS[d.dow]||'';
-    return`<tr class="${isPeak?'highlight-red':''}"><td>${d.data||'—'}</td><td><span class="dow-badge ${dc}">${d.dow}</span></td><td>${fmtBRL(d.fat_total)}</td><td>${fmtBRL(d.serv_tx)}</td><td style="font-weight:500">${fmtBRL(d.fat_real)}</td><td>${fmtNum(d.pessoas)}</td><td>${fmtBRL(d.ticket)}</td></tr>`;}).join('');
-  const cnt=sorted.length;
-  document.getElementById('badge-dia').textContent=`${cnt} registros`;
-  const cntEl=document.getElementById('tbl-dia-count');if(cntEl)cntEl.textContent=`(${cnt})`;
-  document.getElementById('footer-dia').innerHTML=`<span>${rows.length} dias</span><span>Fat.: ${fmtBRL(totFat)}</span><span>Pessoas: ${fmtNum(totPess)}</span><span>Ticket: ${fmtBRL(tkMed)}</span>`;
+function destruir(chart) {
+ if (chart) chart.destroy()
 }
 
-function renderDowChart(rows){
-  const DAYS=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
-  let byPerDow={};
-  rows.forEach(d=>{const dow=getDow(d.data);const per=d.periodo;if(!byPerDow[per])byPerDow[per]={};if(!byPerDow[per][dow])byPerDow[per][dow]={fat:0,cnt:0};byPerDow[per][dow].fat+=Number(d.fat_real)||0;byPerDow[per][dow].cnt++;});
-  const periodos=sortPeriodosDiario(Object.keys(byPerDow));
-  const labels=periodos.map(diarioToLabel);
-  const datasets=DAYS.map(day=>({label:day,data:periodos.map(p=>byPerDow[p][day]?Math.round(byPerDow[p][day].fat/byPerDow[p][day].cnt):null),borderColor:DOW_COLORS[day],backgroundColor:'transparent',borderWidth:2,tension:.3,fill:false,pointRadius:2,pointHoverRadius:5,spanGaps:false}));
-  const legEl=document.getElementById('dow-line-legend');
-  if(legEl)legEl.innerHTML=DAYS.map(d=>`<div class="ceo-leg-i"><span class="ceo-leg-sq" style="background:${DOW_COLORS[d]}"></span>${d}</div>`).join('');
-  const canvas=document.getElementById('dowChart');if(!canvas)return;
-  if(dowChartInst)dowChartInst.destroy();
-  dowChartInst=new Chart(canvas,{type:'line',data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.raw!=null?`${ctx.dataset.label}: ${fmtBRL(ctx.raw)}`:null}}},scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,.05)'},ticks:{callback:v=>'R$'+Math.round(v/1000)+'k'}}}}});
+async function init() {
+ bindTabs()
+ bindSubtabsGenericas()
+ await carregarDados()
 }
 
-function renderDowCards(rows){
-  const DAYS=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
-  let byDow={};DAYS.forEach(d=>{byDow[d]={fat:0,cnt:0,tk:0};});
-  rows.forEach(d=>{const dow=getDow(d.data);if(byDow[dow]){byDow[dow].fat+=Number(d.fat_real)||0;byDow[dow].cnt++;byDow[dow].tk+=Number(d.ticket)||0;}});
-  const maxAvg=Math.max(...DAYS.map(d=>byDow[d].cnt>0?byDow[d].fat/byDow[d].cnt:0));
-  document.getElementById('dow-cards').innerHTML=DAYS.map(day=>{const b=byDow[day];const avg=b.cnt>0?b.fat/b.cnt:0;const tk=b.cnt>0?b.tk/b.cnt:0;const isBest=avg===maxAvg&&avg>0;
-    return`<div class="dow-card${isBest?' best':''}${avg===0?' no-data':''}"><div class="dow-day">${day}</div>${avg>0?`<div class="dow-avg-label">Média Fat.</div><div class="dow-avg-val">${avg>=1000?'R$'+Math.round(avg/1000)+'k':fmtBRL(avg)}</div><div class="dow-meta">TK: ${fmtBRL(tk)}<br>${b.cnt} dia${b.cnt>1?'s':''}</div>`:'<div class="dow-meta" style="margin-top:8px">sem dados</div>'}</div>`;}).join('');
+function bindTabs() {
+ document.querySelectorAll('.tab').forEach(btn => {
+ btn.addEventListener('click', () => {
+ const tab = btn.dataset.tab
+
+ document.querySelectorAll('.tab')
+ .forEach(b => b.classList.remove('active'))
+
+ btn.classList.add('active')
+
+ document.querySelectorAll('.section')
+ .forEach(sec => sec.classList.remove('active'))
+
+ const sec = $(`sec-${tab}`)
+ if (sec) sec.classList.add('active')
+ })
+ })
 }
 
-// ============================================================
-// DELIVERY VS SALÃO
-// ============================================================
-function filterCanal(canal,btn){FILTER_CANAL=canal;document.querySelectorAll('#filter-canal .filter-btn').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderCanais();}
-function clearCanais(){document.getElementById('sel-canais').value='';FILTER_CANAL='';document.querySelectorAll('#filter-canal .filter-btn').forEach((b,i)=>b.classList.toggle('on',i===0));renderCanais();}
-
-function renderCanais(){
-  const p=document.getElementById('sel-canais').value;
-  let rows=DATA.modo_venda.filter(d=>{const mp=p?d.periodo===p:true;const mc=FILTER_CANAL?d.canal===FILTER_CANAL:true;return mp&&mc;});
-  updateClearBtn('clear-canais',p||FILTER_CANAL);
-  const sorted=getSorted('canais',rows);updateSortIcons('canais');
-  const dR=rows.filter(d=>d.canal==='Delivery'),sR=rows.filter(d=>d.canal==='Salão');
-  const dF=dR.reduce((s,d)=>s+(Number(d.fat_real)||0),0),sF=sR.reduce((s,d)=>s+(Number(d.fat_real)||0),0);
-  const tot=dF+sF||1;
-  const dTk=dR.length?dR.reduce((s,d)=>s+(Number(d.ticket_medio)||0),0)/dR.length:0;
-  const sTk=sR.length?sR.reduce((s,d)=>s+(Number(d.ticket_medio)||0),0)/sR.length:0;
-  const dPed=dR.reduce((s,d)=>s+(Number(d.qtd_atend)||0),0);
-  const sCmd=sR.reduce((s,d)=>s+(Number(d.qtd_atend)||0),0);
-  const sPess=sR.reduce((s,d)=>s+(Number(d.pessoas)||0),0);
-  document.getElementById('kpi-canais').innerHTML=`
-    <div class="kpi red"><div class="kpi-l">Delivery Fat. Real</div><div class="kpi-v red">${fmtBRL(dF)}</div><div class="kpi-s">${fmtPct(dF/tot*100)} do total</div></div>
-    <div class="kpi green"><div class="kpi-l">Salão Fat. Real</div><div class="kpi-v green">${fmtBRL(sF)}</div><div class="kpi-s">${fmtPct(sF/tot*100)} do total</div></div>
-    <div class="kpi"><div class="kpi-l">Pedidos Delivery</div><div class="kpi-v">${fmtNum(dPed)}</div><div class="kpi-s">TK médio: ${fmtBRL(dTk)}</div></div>
-    <div class="kpi teal"><div class="kpi-l">Comandas Salão</div><div class="kpi-v">${fmtNum(sCmd)}</div><div class="kpi-s">${fmtNum(sPess)} pessoas · TK: ${fmtBRL(sTk)}</div></div>`;
-
-  const periodos=sortPeriodosMV([...new Set(DATA.modo_venda.map(d=>d.periodo))]);
-  const labels=periodos.map(mvToLabel);
-  const dD=periodos.map(p2=>{const r=DATA.modo_venda.find(d=>d.periodo===p2&&d.canal==='Delivery');return r?Number(r.fat_real):0;});
-  const sD=periodos.map(p2=>{const r=DATA.modo_venda.find(d=>d.periodo===p2&&d.canal==='Salão');return r?Number(r.fat_real):0;});
-  if(canaisInst)canaisInst.destroy();
-  canaisInst=new Chart(document.getElementById('canaisChart'),{type:'line',data:{labels,datasets:[{label:'Delivery',data:dD,borderColor:CEO.red,backgroundColor:CEO.red+'22',borderWidth:2,tension:.3,fill:false,pointRadius:3,pointHoverRadius:6},{label:'Salão',data:sD,borderColor:CEO.green,backgroundColor:CEO.green+'22',borderWidth:2,tension:.3,fill:false,pointRadius:3,pointHoverRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmtBRL(ctx.raw)}`}}},scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,.05)'},ticks:{callback:v=>'R$'+Math.round(v/1000)+'k'}}}}});
-
-  const maxF=Math.max(dF,sF,1),maxP=Math.max(dPed,sCmd,1);
-  document.getElementById('chart-canais-fat').innerHTML=[{l:'Delivery',v:dF,c:'red'},{l:'Salão',v:sF,c:'green'}].map(r=>`<div class="bar-row"><div class="bar-label">${r.l}</div><div class="bar-track"><div class="bar-inner ${r.c}" style="width:${(r.v/maxF*100).toFixed(1)}%"></div></div><div class="bar-val">${fmtBRL(r.v)}</div></div>`).join('');
-  document.getElementById('chart-canais-pedidos').innerHTML=[{l:'Delivery (pedidos)',v:dPed,c:'red'},{l:'Salão (comandas)',v:sCmd,c:'green'}].map(r=>`<div class="bar-row"><div class="bar-label">${r.l}</div><div class="bar-track"><div class="bar-inner ${r.c}" style="width:${(r.v/maxP*100).toFixed(1)}%"></div></div><div class="bar-val">${fmtNum(r.v)}</div></div>`).join('');
-
-  document.getElementById('body-canais').innerHTML=sorted.map(d=>`<tr><td>${d.periodo?mvToLabel(d.periodo):'—'}</td><td><span class="canal-badge ${d.canal==='Delivery'?'canal-delivery':'canal-salao'}">${d.canal}</span></td><td style="font-weight:500">${fmtBRL(d.fat_real)}</td><td>${fmtNum(d.qtd_atend)}</td><td>${fmtBRL(d.ticket_medio)}</td><td>${d.canal==='Salão'?fmtNum(d.pessoas):'—'}</td><td>${fmtBRL(d.consumo_medio)}</td></tr>`).join('');
-  document.getElementById('footer-canais').innerHTML=`<span>Delivery: ${fmtBRL(dF)} · ${fmtNum(dPed)} pedidos</span><span>Salão: ${fmtBRL(sF)} · ${fmtNum(sCmd)} comandas · ${fmtNum(sPess)} pessoas</span>`;
+function bindSubtabsGenericas() {
+ bindSubtabGroup('dia', 'diaTab')
+ bindSubtabGroup('hora', 'horaTab')
+ bindSubtabGroup('metas', 'metasTab')
+ bindSubtabGroup('garcons', 'garconsTab')
 }
 
-// ============================================================
+function bindSubtabGroup(prefixo, datasetKey) {
+ document.querySelectorAll(`[data-${prefixo}-tab]`).forEach(btn => {
+ btn.onclick = () => {
+ const tab = btn.dataset[datasetKey]
+
+ document.querySelectorAll(`[data-${prefixo}-tab]`)
+ .forEach(b => b.classList.remove('active'))
+
+ btn.classList.add('active')
+
+ const secPai =
+ prefixo === 'metas'
+ ? '#sec-metas'
+ : prefixo === 'garcons'
+ ? '#sec-garcons'
+ : prefixo === 'hora'
+ ? '#sec-horario'
+ : '#sec-dia'
+
+ document.querySelectorAll(`${secPai} .subsection`)
+ .forEach(sec => sec.classList.remove('active'))
+
+ const alvo = $(`${prefixo}-${tab}`)
+ if (alvo) alvo.classList.add('active')
+ }
+ })
+}
+
+async function carregarDados() {
+ try {
+ if ($('status')) $('status').textContent = 'Carregando...'
+
+ const res = await fetch('/.netlify/functions/dashboard')
+ const json = await res.json()
+
+ DATA = {
+ resumo_mensal: json.resumo_mensal || [],
+ horarios: json.horarios || [],
+ garcons: json.garcons || [],
+ produtos: json.produtos || [],
+ vendas_diarias: json.vendas_diarias || []
+ }
+
+ montarFiltroPeriodo()
+ renderTudo()
+
+ if ($('status')) {
+ $('status').textContent = `${DATA.resumo_mensal.length} períodos`
+ }
+ } catch (error) {
+ console.error(error)
+ if ($('status')) $('status').textContent = 'Erro'
+ }
+}
+
+function montarFiltroPeriodo() {
+ const select = $('periodoGlobal')
+ if (!select) return
+
+ const periodos = [...new Set(
+ (DATA.resumo_mensal || [])
+ .map(item => item.periodo)
+ .filter(Boolean)
+ )].sort((a, b) => periodoParaOrdem(a) - periodoParaOrdem(b))
+
+ select.innerHTML = `
+ <option value="todos">Todos os períodos</option>
+ ${periodos.map(p => `<option value="${p}">${p}</option>`).join('')}
+ `
+
+ select.onchange = e => {
+ filtroPeriodo = e.target.value
+ renderTudo()
+ }
+}
+
+function getDadosFiltrados() {
+ const dados = DATA.resumo_mensal || []
+
+ if (filtroMetas === 'todos') return dados
+
+ return dados.filter(item =>
+ periodoEquivalente(item.periodo, filtroMetas)
+ )
+}
+
+function getDadosCanaisFiltrados() {
+ const dados = DATA.resumo_mensal || []
+
+ if (filtroCanais === 'todos') return dados
+
+ return dados.filter(item =>
+ periodoEquivalente(item.periodo, filtroCanais)
+ )
+}
+
+function getItemReferencia(dados) {
+ if (!dados.length) return null
+ return [...dados].sort((a, b) => periodoParaOrdem(a.periodo) - periodoParaOrdem(b.periodo)).at(-1)
+}
+
+function renderTudo() {
+ const dados = getDadosFiltrados()
+
+ montarFiltrosPorAba()
+
+ if ($('kpi-fat')) renderKPIs(dados)
+ if ($('tbodyResumo')) renderTabela(dados)
+ if ($('chartMetas')) renderGraficoMetas(dados)
+ if ($('chartCanais')) renderGraficoCanais(dados)
+
+ if ($('canal-salao-fat')) renderAbaCanais(getDadosCanaisFiltrados())
+ if ($('hora-melhor')) renderAbaHorario()
+ if ($('selectHora')) renderHoraDetalhe()
+ if ($('garcon-top')) renderAbaGarcons()
+ if ($('prod-top')) renderAbaProdutos()
+ if ($('dia-melhor')) renderAbaDiaSemana()
+ if ($('selectDiaSemana')) renderDiaSemanaDetalhe()
+ if ($('meta-dia-top')) renderMetasDiarias()
+ if ($('meta-canal-delivery')) renderMetasCanais()
+ if ($('hist-maior-mes')) renderMetasHistorico()
+ if ($('selectGarcomPerfil')) renderPerfilGarcom()
+ if ($('gar-crescimento-top')) renderGarconsCrescimento()
+ if ($('compararAInicio')) renderCompararPeriodos()
+ if ($('insights-gerais-resumo')) renderInsightsGerais()
+ if ($('insights-crescimento')) renderInsights()
+}
+
+// ===============================
+// METAS
+// ===============================
+
+function renderKPIs(dados) {
+ const ref = getItemReferencia(dados)
+ if (!ref) return
+
+ $('kpi-fat').textContent = fmtBRL(ref.fat_real_total)
+ $('kpi-meta').textContent = fmtBRL(ref.meta_total)
+ $('kpi-pct').textContent = fmtPct(ref.pct_meta_total)
+ $('kpi-pessoas').textContent = fmtNum(ref.pessoas_reais)
+}
+
+function renderTabela(dados) {
+ $('tbodyResumo').innerHTML = dados.map(item => `
+ <tr>
+ <td>${item.periodo}</td>
+ <td>${fmtBRL(item.fat_real_total)}</td>
+ <td>${fmtBRL(item.meta_total)}</td>
+ <td>${fmtPct(item.pct_meta_total)}</td>
+ <td>${fmtBRL(item.fat_real_salao)}</td>
+ <td>${fmtBRL(item.fat_real_delivery)}</td>
+ <td>${fmtNum(item.pessoas_reais)}</td>
+ <td>${fmtNum(item.atendimentos_total)}</td>
+ </tr>
+ `).join('')
+}
+
+function renderGraficoMetas(dados) {
+ const ctx = $('chartMetas')
+ if (!ctx) return
+
+ destruir(chartMetas)
+
+ chartMetas = new Chart(ctx, {
+ type: 'bar',
+ data: {
+ labels: dados.map(d => d.periodo),
+ datasets: [
+ { label: 'Faturamento Real', data: dados.map(d => Number(d.fat_real_total || 0)) },
+ { label: 'Meta Total', data: dados.map(d => Number(d.meta_total || 0)) }
+ ]
+ },
+ options: { responsive: true }
+ })
+}
+
+function renderGraficoCanais(dados) {
+ const ctx = $('chartCanais')
+ if (!ctx) return
+
+ destruir(chartCanais)
+
+ const totalSalao = dados.reduce((acc, d) => acc + Number(d.fat_real_salao || 0), 0)
+ const totalDelivery = dados.reduce((acc, d) => acc + Number(d.fat_real_delivery || 0), 0)
+
+ chartCanais = new Chart(ctx, {
+ type: 'doughnut',
+ data: {
+ labels: ['Salão', 'Delivery'],
+ datasets: [{ data: [totalSalao, totalDelivery] }]
+ },
+ options: { responsive: true }
+ })
+}
+
+// ===============================
+// CANAIS
+// ===============================
+
+function renderAbaCanais(dados) {
+ const totalSalao = dados.reduce((acc, d) => acc + Number(d.fat_real_salao || 0), 0)
+ const totalDelivery = dados.reduce((acc, d) => acc + Number(d.fat_real_delivery || 0), 0)
+ const total = totalSalao + totalDelivery
+
+ $('canal-salao-fat').textContent = fmtBRL(totalSalao)
+ $('canal-delivery-fat').textContent = fmtBRL(totalDelivery)
+ $('canal-salao-pct').textContent = fmtPct(total ? totalSalao / total : 0)
+ $('canal-delivery-pct').textContent = fmtPct(total ? totalDelivery / total : 0)
+
+ $('tbodyCanais').innerHTML = dados.map(item => {
+ const salao = Number(item.fat_real_salao || 0)
+ const delivery = Number(item.fat_real_delivery || 0)
+ const soma = salao + delivery
+
+ return `
+ <tr>
+ <td>${item.periodo}</td>
+ <td>${fmtBRL(salao)}</td>
+ <td>${fmtBRL(delivery)}</td>
+ <td>${fmtBRL(soma)}</td>
+ <td>${fmtPct(soma ? salao / soma : 0)}</td>
+ <td>${fmtPct(soma ? delivery / soma : 0)}</td>
+ <td>${fmtNum(item.pessoas_reais)}</td>
+ <td>${fmtNum(item.atendimentos_total)}</td>
+ </tr>
+ `
+ }).join('')
+
+ renderChartCanaisLinha(dados)
+ renderChartCanaisPizza(totalSalao, totalDelivery)
+}
+
+function renderChartCanaisLinha(dados) {
+ const ctx = $('chartCanaisLinha')
+ if (!ctx) return
+
+ destruir(chartCanaisLinha)
+
+ chartCanaisLinha = new Chart(ctx, {
+ type: 'line',
+ data: {
+ labels: dados.map(d => d.periodo),
+ datasets: [
+ { label: 'Salão', data: dados.map(d => Number(d.fat_real_salao || 0)) },
+ { label: 'Delivery', data: dados.map(d => Number(d.fat_real_delivery || 0)) }
+ ]
+ },
+ options: { responsive: true }
+ })
+}
+
+function renderChartCanaisPizza(totalSalao, totalDelivery) {
+ const ctx = $('chartCanaisPizza')
+ if (!ctx) return
+
+ destruir(chartCanaisPizza)
+
+ chartCanaisPizza = new Chart(ctx, {
+ type: 'doughnut',
+ data: {
+ labels: ['Salão', 'Delivery'],
+ datasets: [{ data: [totalSalao, totalDelivery] }]
+ },
+ options: { responsive: true }
+ })
+}
+
+// ===============================
 // HORÁRIO
-// ============================================================
-function renderHoraCards(aggRows){
-  const el=document.getElementById('horario-hora-cards');if(!el)return;
-  const sorted=aggRows.slice().sort((a,b)=>a.hora-b.hora);
-  const maxReal=Math.max(...sorted.map(d=>d.total_real),1);
-  const bestHora=sorted.reduce((best,d)=>d.total_real>best.total_real?d:best,sorted[0]||{hora:-1,total_real:0});
-  el.innerHTML=HORAS_FUNC.map(h=>{
-    const d=sorted.find(r=>r.hora===h);
-    const info=HORA_INFO[h]||{delivery:false,salao:false,obs:''};
-    const isBest=d&&d.hora===bestHora.hora;
-    const isDeliveryOnly=info.delivery&&!info.salao;
-    const isLate=h===23;
-    // Badge de canal
-    let badge='';
-    if(isDeliveryOnly) badge=`<div style="font-size:9px;font-weight:600;color:var(--red);background:var(--redb);border-radius:6px;padding:1px 5px;margin-bottom:3px;display:inline-block">Del. only</div>`;
-    else if(isLate) badge=`<div style="font-size:9px;font-weight:600;color:var(--amber);background:var(--amberb);border-radius:6px;padding:1px 5px;margin-bottom:3px;display:inline-block">Sex/Sáb</div>`;
-    if(!d)return`<div style="background:var(--b1);border-radius:10px;padding:12px 10px;text-align:center;opacity:${isDeliveryOnly?'.5':'.3'}">
-      ${badge}
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--ink3)">${String(h).padStart(2,'0')}:00</div>
-      <div style="font-size:10px;color:var(--ink3);margin-top:4px">sem dados</div>
-    </div>`;
-    const pct=(d.total_real/maxReal*100).toFixed(1);
-    const color=isBest?'var(--red)':isDeliveryOnly?'#C0392B88':'var(--black)';
-    const bg=isBest?'var(--redb)':isDeliveryOnly?'#FDF2F188':'var(--white)';
-    const border=isBest?'2px solid var(--red)':isDeliveryOnly?'1px dashed var(--red)':'1px solid var(--b1)';
-    return`<div style="background:${bg};border:${border};border-radius:10px;padding:12px 10px;text-align:center">
-      ${badge}
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:${color};letter-spacing:.3px">${String(h).padStart(2,'0')}:00</div>
-      <div style="font-size:9px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.04em;margin-top:3px;margin-bottom:2px">Média Fat.</div>
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:17px;color:${color}">${d.total_real>=1000?'R$'+Math.round(d.total_real/1000)+'k':fmtBRL(d.total_real)}</div>
-      <div style="font-size:10px;color:var(--ink3);margin-top:3px;line-height:1.4">TK: ${fmtBRL(d.ticket_medio)}<br>${d.pessoas||0} pess.</div>
-      <div style="margin-top:6px;height:4px;background:var(--b1);border-radius:2px;overflow:hidden">
-        <div style="height:100%;background:${color};width:${pct}%;border-radius:2px"></div>
-      </div>
-    </div>`;
-  }).join('');
+// ===============================
+
+function getHorariosFiltrados() {
+ const horarios = DATA.horarios || []
+
+ if (filtroHorario === 'todos') return horarios
+
+ return horarios.filter(h =>
+ periodoEquivalente(h.periodo, filtroHorario)
+ )
 }
 
-function clearHorario(){document.getElementById('sel-horario').value='';renderHorario();}
-function renderHorario(){
-  const p=document.getElementById('sel-horario').value;
-  let rows=p?DATA.horario.filter(d=>d.periodo===p):DATA.horario;
-  updateClearBtn('clear-horario',p);
-  let byH={};rows.forEach(d=>{const h=d.hora;if(!byH[h])byH[h]={hora:h,valor_total:0,total_real:0,pessoas:0,serv_tx:0,cnt:0,tk:0};byH[h].valor_total+=Number(d.valor_total)||0;byH[h].total_real+=Number(d.total_real)||0;byH[h].pessoas+=Number(d.pessoas)||0;byH[h].serv_tx+=Number(d.serv_tx)||0;byH[h].cnt++;byH[h].tk+=Number(d.ticket_medio)||0;});
-  let aggRows=Object.values(byH).filter(d=>d.total_real>0).map(d=>({...d,ticket_medio:d.cnt>0?d.tk/d.cnt:0}));
-  const sorted=getSorted('horario',aggRows);updateSortIcons('horario');
-  renderHoraCards(aggRows);
-  const maxF=Math.max(...aggRows.map(d=>d.total_real),1);
-  document.getElementById('chart-horario').innerHTML=aggRows.slice().sort((a,b)=>a.hora-b.hora).map(d=>`<div class="bar-row"><div class="bar-label">${String(d.hora).padStart(2,'0')}:00</div><div class="bar-track"><div class="bar-inner red" style="width:${(d.total_real/maxF*100).toFixed(1)}%"></div></div><div class="bar-val">${fmtBRL(d.total_real)}</div></div>`).join('');
-  renderHorarioLineChart();
-  document.getElementById('body-horario').innerHTML=sorted.map(d=>`<tr><td>${String(d.hora).padStart(2,'0')}:00</td><td style="font-weight:500">${fmtBRL(d.total_real)}</td><td>${fmtBRL(d.valor_total)}</td><td>${fmtNum(d.pessoas)}</td><td>${fmtBRL(d.ticket_medio)}</td></tr>`).join('');
-  document.getElementById('badge-horario').textContent=`${aggRows.length} horas ativas`;
-  document.getElementById('footer-horario').innerHTML=`<span>${aggRows.length} horas</span><span>Fat. Real: ${fmtBRL(aggRows.reduce((s,d)=>s+d.total_real,0))}</span>`;
+function agruparHorario(horarios) {
+ const mapa = {}
+
+ horarios.forEach(h => {
+ const horaNum = normalizarHora(h.hora)
+ const horaLabel = Number.isFinite(horaNum) ? horaNum : h.hora
+
+ if (!mapa[horaLabel]) {
+ mapa[horaLabel] = { hora: horaLabel, fat_real: 0, pessoas: 0 }
+ }
+
+ mapa[horaLabel].fat_real += Number(h.fat_real || 0)
+ mapa[horaLabel].pessoas += Number(h.pessoas || 0)
+ })
+
+ return Object.values(mapa)
+ .sort((a, b) => Number(a.hora) - Number(b.hora))
+ .map(h => ({
+ ...h,
+ ticket: h.pessoas ? h.fat_real / h.pessoas : 0
+ }))
 }
 
-function renderHorarioLineChart(){
-  let byPerHora={};
-  DATA.horario.forEach(d=>{const p=d.periodo;const h=d.hora;if(!byPerHora[p])byPerHora[p]={};if(!byPerHora[p][h])byPerHora[p][h]={val:0,cnt:0};byPerHora[p][h].val+=Number(d.total_real)||0;byPerHora[p][h].cnt++;});
-  const periodos=sortPeriodosMV(Object.keys(byPerHora));
-  const labels=periodos.map(mvToLabel);
-  const horas=[...new Set(DATA.horario.map(d=>d.hora))].filter(h=>h!=null).sort((a,b)=>a-b);
-  const datasets=horas.map((h,i)=>({label:`${String(h).padStart(2,'0')}:00`,data:periodos.map(p=>byPerHora[p]&&byPerHora[p][h]?Math.round(byPerHora[p][h].val/byPerHora[p][h].cnt):null),borderColor:HORA_COLORS[i%HORA_COLORS.length],backgroundColor:'transparent',borderWidth:1.5,tension:.3,fill:false,pointRadius:2,pointHoverRadius:5,spanGaps:false}));
-  const canvas=document.getElementById('horarioLineChart');if(!canvas)return;
-  if(horarioLineInst)horarioLineInst.destroy();
-  horarioLineInst=new Chart(canvas,{type:'line',data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:12,font:{size:11},padding:8}},tooltip:{callbacks:{label:ctx=>ctx.raw!=null?`${ctx.dataset.label}: ${fmtBRL(ctx.raw)}`:null}}},scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,.05)'},ticks:{callback:v=>'R$'+Math.round(v/1000)+'k'}}}}});
+function renderAbaHorario() {
+ const dados = agruparHorario(getHorariosFiltrados())
+ if (!dados.length) return
+
+ const melhor = [...dados].sort((a, b) => b.fat_real - a.fat_real)[0]
+ const totalFat = dados.reduce((acc, h) => acc + h.fat_real, 0)
+ const totalPessoas = dados.reduce((acc, h) => acc + h.pessoas, 0)
+ const ticketMedio = totalPessoas ? totalFat / totalPessoas : 0
+
+ $('hora-melhor').textContent = `${melhor.hora}h`
+ $('hora-melhor-fat').textContent = fmtBRL(melhor.fat_real)
+ $('hora-pessoas').textContent = fmtNum(totalPessoas)
+ $('hora-ticket').textContent = fmtBRL(ticketMedio)
+
+ $('tbodyHorario').innerHTML = dados.map(h => `
+ <tr>
+ <td>${h.hora}h</td>
+ <td>${fmtBRL(h.fat_real)}</td>
+ <td>${fmtNum(h.pessoas)}</td>
+ <td>${fmtBRL(h.ticket)}</td>
+ </tr>
+ `).join('')
+
+ renderChartHorarioFat(dados)
+ renderChartHorarioPessoas(dados)
 }
 
-// ============================================================
+function renderChartHorarioFat(dados) {
+ const ctx = $('chartHorarioFat')
+ if (!ctx) return
+
+ destruir(chartHorarioFat)
+
+ chartHorarioFat = new Chart(ctx, {
+ type: 'bar',
+ data: {
+ labels: dados.map(h => `${h.hora}h`),
+ datasets: [{ label: 'Faturamento', data: dados.map(h => h.fat_real) }]
+ },
+ options: { responsive: true }
+ })
+}
+
+function renderChartHorarioPessoas(dados) {
+ const ctx = $('chartHorarioPessoas')
+ if (!ctx) return
+
+ destruir(chartHorarioPessoas)
+
+ chartHorarioPessoas = new Chart(ctx, {
+ type: 'line',
+ data: {
+ labels: dados.map(h => `${h.hora}h`),
+ datasets: [{ label: 'Pessoas', data: dados.map(h => h.pessoas) }]
+ },
+ options: { responsive: true }
+ })
+}
+
+function popularSelectHora() {
+ const select = $('selectHora')
+ if (!select || select.dataset.loaded) return
+
+ const horas = [...new Set(
+ getHorariosFiltrados()
+ .map(h => normalizarHora(h.hora))
+ .filter(h => Number.isFinite(h))
+ )].sort((a, b) => a - b)
+
+ if (horas.length) {
+ select.innerHTML = horas
+ .map(h => `<option value="${h}">${h}h</option>`)
+ .join('')
+ }
+
+ select.onchange = renderHoraDetalhe
+ select.dataset.loaded = '1'
+}
+
+function renderHoraDetalhe() {
+ const select = $('selectHora')
+ if (!select) return
+
+ popularSelectHora()
+
+ const horaSelecionada = Number(select.value)
+
+ const horarios = getHorariosFiltrados()
+ .filter(h => normalizarHora(h.hora) === horaSelecionada)
+ .sort((a, b) => periodoParaOrdem(a.periodo) - periodoParaOrdem(b.periodo))
+
+ if (!horarios.length) {
+ $('hora-det-fat').textContent = '—'
+ $('hora-det-fat-medio').textContent = '—'
+ $('hora-det-pessoas').textContent = '—'
+ $('hora-det-ticket').textContent = '—'
+ $('tbodyHoraDetalhe').innerHTML = `
+ <tr>
+ <td colspan="4" style="text-align:left">
+ Sem dados para a hora selecionada.
+ </td>
+ </tr>
+ `
+ destruir(chartHoraDetalheFat)
+ destruir(chartHoraDetalhePessoas)
+ return
+ }
+
+ const fatTotal = horarios.reduce((acc, h) => acc + Number(h.fat_real || 0), 0)
+ const pessoasTotal = horarios.reduce((acc, h) => acc + Number(h.pessoas || 0), 0)
+ const fatMedio = fatTotal / horarios.length
+ const pessoasMedia = pessoasTotal / horarios.length
+ const ticket = pessoasTotal ? fatTotal / pessoasTotal : 0
+
+ $('hora-det-fat').textContent = fmtBRL(fatTotal)
+ $('hora-det-fat-medio').textContent = fmtBRL(fatMedio)
+ $('hora-det-pessoas').textContent = fmtNum(Math.round(pessoasMedia))
+ $('hora-det-ticket').textContent = fmtBRL(ticket)
+
+ $('tbodyHoraDetalhe').innerHTML = horarios.map(h => {
+ const ticketLinha = Number(h.pessoas || 0)
+ ? Number(h.fat_real || 0) / Number(h.pessoas)
+ : 0
+
+ return `
+ <tr>
+ <td>${h.periodo}</td>
+ <td>${fmtBRL(h.fat_real)}</td>
+ <td>${fmtNum(h.pessoas)}</td>
+ <td>${fmtBRL(ticketLinha)}</td>
+ </tr>
+ `
+ }).join('')
+
+ renderChartHoraDetalheFat(horarios)
+ renderChartHoraDetalhePessoas(horarios)
+}
+
+function renderChartHoraDetalheFat(horarios) {
+ const ctx = $('chartHoraDetalheFat')
+ if (!ctx) return
+
+ destruir(chartHoraDetalheFat)
+
+ chartHoraDetalheFat = new Chart(ctx, {
+ type: 'line',
+ data: {
+ labels: horarios.map(h => h.periodo),
+ datasets: [
+ {
+ label: 'Faturamento',
+ data: horarios.map(h => Number(h.fat_real || 0))
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
+}
+
+function renderChartHoraDetalhePessoas(horarios) {
+ const ctx = $('chartHoraDetalhePessoas')
+ if (!ctx) return
+
+ destruir(chartHoraDetalhePessoas)
+
+ chartHoraDetalhePessoas = new Chart(ctx, {
+ type: 'bar',
+ data: {
+ labels: horarios.map(h => h.periodo),
+ datasets: [
+ {
+ label: 'Pessoas',
+ data: horarios.map(h => Number(h.pessoas || 0))
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
+}
+
+// ===============================
 // GARÇONS
-// ============================================================
-function clearGarcons(){document.getElementById('sel-garcons').value='';renderGarcons();}
+// ===============================
 
-function getGarconStatus(nome){
-  // Pegar todos os períodos em que o garçom aparece
-  const periodos=DATA.atendente.filter(d=>d.atendente===nome).map(d=>d.periodo);
-  if(!periodos.length)return{status:'inativo',label:'Sem dados'};
-  const allPeriodos=sortPeriodosMV([...new Set(DATA.modo_venda.map(d=>d.periodo))]);
-  if(!allPeriodos.length)return{status:'ativo',label:'Ativo'};
-  const lastAll=allPeriodos[allPeriodos.length-1];
-  const lastGarcon=sortPeriodosMV(periodos)[periodos.length-1];
-  // Calcular meses de diferença
-  const idxLast=allPeriodos.indexOf(lastAll);
-  const idxGarcon=allPeriodos.indexOf(lastGarcon);
-  const diff=idxLast-idxGarcon;
-  if(diff===0)return{status:'ativo',label:'Ativo'};
-  if(diff<=2)return{status:'parcial',label:`Último: ${mvToLabel(lastGarcon)}`};
-  return{status:'inativo',label:`Inativo desde ${mvToLabel(lastGarcon)}`};
+function getGarconsFiltrados() {
+ const garcons = DATA.garcons || []
+
+ if (filtroGarcons === 'todos') return garcons
+
+ return garcons.filter(g =>
+ periodoEquivalente(g.periodo, filtroGarcons)
+ )
 }
 
-function renderGarcons(){
-  const p=document.getElementById('sel-garcons').value;
-  let rows=DATA.atendente.filter(d=>!isIfood(d.atendente));
-  if(p)rows=rows.filter(d=>d.periodo===p);
-  updateClearBtn('clear-garcons',p);
-
-  // Agregar por garçom
-  let byGarcon={};
-  rows.forEach(d=>{
-    const k=d.atendente;
-    if(!byGarcon[k])byGarcon[k]={atendente:k,quantidade:0,valor_total:0,vm_sum:0,vm_cnt:0};
-    byGarcon[k].quantidade+=Number(d.quantidade)||0;
-    byGarcon[k].valor_total+=Number(d.valor_total)||0;
-    byGarcon[k].vm_sum+=Number(d.valor_medio)||0;
-    byGarcon[k].vm_cnt++;
-  });
-  let aggRows=Object.values(byGarcon).map(d=>({...d,valor_medio:d.vm_cnt>0?d.vm_sum/d.vm_cnt:0})).sort((a,b)=>b.valor_total-a.valor_total);
-
-  const totFat=aggRows.reduce((s,d)=>s+d.valor_total,0);
-  const ifoodRows=DATA.atendente.filter(d=>isIfood(d.atendente));
-  const ifoodFat=ifoodRows.reduce((s,d)=>s+(Number(d.valor_total)||0),0);
-
-  document.getElementById('kpi-garcons').innerHTML=`
-    <div class="kpi red"><div class="kpi-l">Total Salão</div><div class="kpi-v red">${fmtBRL(totFat)}</div><div class="kpi-s">${aggRows.length} garçons</div></div>
-    <div class="kpi"><div class="kpi-l">Delivery (iFood)</div><div class="kpi-v">${fmtBRL(ifoodFat)}</div><div class="kpi-s">separado do ranking</div></div>
-    <div class="kpi green"><div class="kpi-l">Ticket/Item Médio</div><div class="kpi-v green">${fmtBRL(aggRows.reduce((s,d)=>s+d.valor_medio,0)/aggRows.length||0)}</div><div class="kpi-s">média dos garçons</div></div>
-    <div class="kpi teal"><div class="kpi-l">Itens Totais</div><div class="kpi-v">${fmtNum(aggRows.reduce((s,d)=>s+d.quantidade,0))}</div><div class="kpi-s">no período</div></div>`;
-
-  document.getElementById('badge-garcons').textContent=`${aggRows.length} garçons`;
-
-  const ativos=aggRows.filter(d=>getGarconStatus(d.atendente).status!=='inativo');
-  const inativos=aggRows.filter(d=>getGarconStatus(d.atendente).status==='inativo');
-
-  function garconCardHtml(d){
-    const st=getGarconStatus(d.atendente);
-    const pct=totFat>0?d.valor_total/totFat*100:0;
-    const isInativo=st.status==='inativo';
-    const isAtivo=garconAtivo===d.atendente;
-    return`<div onclick="openGarconPerfil('${d.atendente.replace(/'/g,"\'")})"
-      style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:10px;cursor:pointer;border:${isAtivo?'2px solid var(--red)':'1px solid var(--b1)'};background:${isAtivo?'var(--redb)':'var(--white)'};transition:all .15s;${isInativo?'opacity:.5':''}">
-      <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
-        <div style="width:32px;height:32px;border-radius:50%;background:${isAtivo?'var(--red)':'var(--b1)'};color:${isAtivo?'#fff':'var(--ink3)'};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${d.atendente.charAt(0)}</div>
-        <div style="min-width:0">
-          <div style="font-size:13px;font-weight:600;color:${isAtivo?'var(--red)':'var(--ink)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${d.atendente}</div>
-          <div style="font-size:10px;color:var(--ink3)">${fmtNum(d.quantidade)} itens · TK ${fmtBRL(d.valor_medio)}</div>
-        </div>
-      </div>
-      <div style="text-align:right;flex-shrink:0;margin-left:10px">
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:${isAtivo?'var(--red)':'var(--ink)'}">${fmtBRL(d.valor_total)}</div>
-        <span style="font-size:10px;font-weight:600;padding:1px 7px;border-radius:8px;background:${st.status==='ativo'?'var(--greenb)':st.status==='parcial'?'var(--amberb)':'var(--redb)'};color:${st.status==='ativo'?'var(--green)':st.status==='parcial'?'var(--amber)':'var(--red)'}">${st.label}</span>
-      </div>
-    </div>`;
-  }
-
-  // Cards ativos como lista
-  document.getElementById('garcon-cards').innerHTML=ativos.map(d=>garconCardHtml(d)).join('');
-
-  // Seção inativos colapsada abaixo
-  const inativosEl=document.getElementById('garcon-inativos-section');
-  if(inativosEl){
-    inativosEl.innerHTML=inativos.length?`
-      <button id="garcon-inativos-btn" onclick="toggleCollapse('garcon-inativos-wrap','garcon-inativos-btn','▶ Inativos (${inativos.length})','▼ Fechar inativos')" class="collapse-btn">▶ Inativos (${inativos.length})</button>
-      <div id="garcon-inativos-wrap" style="display:none;margin-top:8px">
-        <div style="display:flex;flex-direction:column;gap:8px;opacity:.55">${inativos.map(d=>garconCardHtml(d)).join('')}</div>
-      </div>`:'';
-  }
-
-  if(garconAtivo)openGarconPerfil(garconAtivo);
+function removerPlataformasGarcons(dados) {
+ return dados.filter(g =>
+ !String(g.atendente || '').toUpperCase().includes('IFOOD')
+ )
 }
 
-function openGarconPerfil(nome){
-  garconAtivo=nome;
-  document.querySelectorAll('.garcon-card').forEach(c=>c.classList.remove('active'));
-  document.querySelectorAll('.garcon-card').forEach(c=>{if(c.querySelector('.garcon-name')?.textContent===nome)c.classList.add('active');});
+function renderAbaGarcons() {
+ const dados = removerPlataformasGarcons(getGarconsFiltrados())
+ if (!dados.length) return
 
-  const perfil=document.getElementById('garcon-perfil');
-  perfil.classList.add('open');
-  perfil.scrollIntoView({behavior:'smooth',block:'nearest'});
+ const agrupados = {}
 
-  const rows=DATA.atendente.filter(d=>d.atendente===nome);
-  const periodos=sortPeriodosMV([...new Set(rows.map(d=>d.periodo))]);
-  const labels=periodos.map(mvToLabel);
-  const fats=periodos.map(p=>rows.filter(d=>d.periodo===p).reduce((s,d)=>s+(Number(d.valor_total)||0),0));
-  const qtds=periodos.map(p=>rows.filter(d=>d.periodo===p).reduce((s,d)=>s+(Number(d.quantidade)||0),0));
+ dados.forEach(g => {
+ const nome = g.atendente || 'Sem nome'
 
-  const totFat=fats.reduce((s,v)=>s+v,0);
-  const totQtd=qtds.reduce((s,v)=>s+v,0);
-  const avgFat=fats.length?totFat/fats.length:0;
-  const bestMes=labels[fats.indexOf(Math.max(...fats))]||'—';
-  const st=getGarconStatus(nome);
+ if (!agrupados[nome]) {
+ agrupados[nome] = { atendente: nome, quantidade: 0, fat_real: 0 }
+ }
 
-  document.getElementById('gpf-nome').textContent=nome;
-  document.getElementById('gpf-status-badge').innerHTML=`<span class="garcon-status ${st.status}" style="position:static;display:inline-block;margin-top:4px">${st.label}</span>`;
-  document.getElementById('gpf-kpis').innerHTML=`
-    <div class="garcon-kpi"><div class="garcon-kpi-l">Total Faturado</div><div class="garcon-kpi-v" style="color:var(--red)">${fmtBRL(totFat)}</div></div>
-    <div class="garcon-kpi"><div class="garcon-kpi-l">Média Mensal</div><div class="garcon-kpi-v">${fmtBRL(avgFat)}</div></div>
-    <div class="garcon-kpi"><div class="garcon-kpi-l">Itens Totais</div><div class="garcon-kpi-v">${fmtNum(totQtd)}</div></div>
-    <div class="garcon-kpi"><div class="garcon-kpi-l">Melhor Mês</div><div class="garcon-kpi-v" style="font-size:18px">${bestMes}</div></div>`;
+ agrupados[nome].quantidade += Number(g.quantidade || 0)
+ agrupados[nome].fat_real += Number(g.fat_real || 0)
+ })
 
-  // Mostrar painel direito
-  const placeholder=document.getElementById('garcon-placeholder');
-  const perfilCard=document.getElementById('garcon-perfil-card');
-  if(placeholder)placeholder.style.display='none';
-  if(perfilCard)perfilCard.style.display='block';
-  document.getElementById('gsc-nome').textContent=nome;
-  // Status badge no perfil lateral
-  const st2=getGarconStatus(nome);
-  const b2=document.getElementById('gpf-status-badge2');
-  if(b2)b2.innerHTML=`<span class="garcon-status ${st2.status}" style="position:static;display:inline-block;margin-top:4px">${st2.label}</span>`;
-  // KPIs no painel lateral
-  const kpis2=document.getElementById('gpf-kpis2');
-  if(kpis2)kpis2.innerHTML=`
-    <div class="garcon-kpi"><div class="garcon-kpi-l">Total faturado</div><div class="garcon-kpi-v" style="color:var(--red);font-size:18px">${fmtBRL(totFat)}</div></div>
-    <div class="garcon-kpi"><div class="garcon-kpi-l">Média mensal</div><div class="garcon-kpi-v" style="font-size:18px">${fmtBRL(avgFat)}</div></div>
-    <div class="garcon-kpi"><div class="garcon-kpi-l">Itens totais</div><div class="garcon-kpi-v" style="font-size:18px">${fmtNum(totQtd)}</div></div>
-    <div class="garcon-kpi"><div class="garcon-kpi-l">Melhor mês</div><div class="garcon-kpi-v" style="font-size:16px">${bestMes}</div></div>`;
-  // Notas no painel lateral
-  const notasSide=document.getElementById('notas-garcon-side');
-  if(notasSide){const notas2=getNotasGarcon(nome);notasSide.innerHTML=notas2.length?renderNotasCards(notas2):'';}
-  // Tabela histórico lateral
-  const body2=document.getElementById('body-garcon2');
-  if(body2)body2.innerHTML=periodos.map((p,i)=>`<tr><td>${labels[i]}</td><td>${fmtNum(qtds[i])}</td><td style="font-weight:500">${fmtBRL(fats[i])}</td><td>${fmtBRL(qtds[i]>0?fats[i]/qtds[i]:0)}</td></tr>`).join('');
+ const ranking = Object.values(agrupados)
+ .map(g => ({
+ ...g,
+ ticket: g.quantidade ? g.fat_real / g.quantidade : 0
+ }))
+ .sort((a, b) => b.fat_real - a.fat_real)
 
-  // Side chart — gráficos no painel lateral
-    if(gscFatInst)gscFatInst.destroy();
-    gscFatInst=new Chart(document.getElementById('gsc-fat-chart'),{type:'line',data:{labels,datasets:[{label:'Fat.',data:fats,borderColor:CEO.red,backgroundColor:CEO.red+'22',borderWidth:2,tension:.3,fill:true,pointRadius:3,pointHoverRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`R$ ${ctx.raw.toLocaleString('pt-BR',{minimumFractionDigits:2})}`}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},maxRotation:45}},y:{grid:{color:'rgba(0,0,0,.05)'},ticks:{callback:v=>'R$'+Math.round(v/1000)+'k',font:{size:9}}}}}});
-    if(gscItensInst)gscItensInst.destroy();
-    gscItensInst=new Chart(document.getElementById('gsc-itens-chart'),{type:'bar',data:{labels,datasets:[{label:'Itens',data:qtds,backgroundColor:CEO.green+'CC',borderRadius:3,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:9},maxRotation:45}},y:{grid:{color:'rgba(0,0,0,.05)'},ticks:{font:{size:9}}}}}});
+ const top = ranking[0]
+ const totalFat = ranking.reduce((acc, g) => acc + g.fat_real, 0)
+ const ticketMedio = ranking.reduce((acc, g) => acc + g.ticket, 0) / ranking.length
 
-  // Notas do garçom
-  const notas=getNotasGarcon(nome);
-  document.getElementById('notas-garcon-perfil').innerHTML=notas.length?renderNotasCards(notas):'<div style="font-size:12px;color:var(--ink3);padding:4px 0">Sem notas para este garçom. Adicione via lp_notas com contexto=\'garcon\' e periodo=\''+nome+'\'.</div>';
+ $('garcon-top').textContent = top.atendente
+ $('garcon-top-fat').textContent = fmtBRL(top.fat_real)
+ $('garcon-qtd').textContent = fmtNum(ranking.length)
+ $('garcon-ticket').textContent = fmtBRL(ticketMedio)
 
-  // Gráfico fat
-  if(gpfFatInst)gpfFatInst.destroy();
-  gpfFatInst=new Chart(document.getElementById('gpf-fat-chart'),{type:'line',data:{labels,datasets:[{label:'Fat.',data:fats,borderColor:CEO.red,backgroundColor:CEO.red+'22',borderWidth:2,tension:.3,fill:true,pointRadius:4,pointHoverRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`R$ ${ctx.raw.toLocaleString('pt-BR',{minimumFractionDigits:2})}`}}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'rgba(0,0,0,.05)'},ticks:{callback:v=>'R$'+Math.round(v/1000)+'k'}}}}});
+ $('tbodyGarcons').innerHTML = ranking.map(g => `
+ <tr>
+ <td>${g.atendente}</td>
+ <td>${fmtNum(g.quantidade)}</td>
+ <td>${fmtBRL(g.fat_real)}</td>
+ <td>${fmtBRL(g.ticket)}</td>
+ <td>${fmtPct(totalFat ? g.fat_real / totalFat : 0)}</td>
+ </tr>
+ `).join('')
 
-  // Gráfico itens
-  if(gpfItensInst)gpfItensInst.destroy();
-  gpfItensInst=new Chart(document.getElementById('gpf-itens-chart'),{type:'bar',data:{labels,datasets:[{label:'Itens',data:qtds,backgroundColor:CEO.green+'CC',borderRadius:4,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'rgba(0,0,0,.05)'}}}}});
-
-  // Tabela histórico
-  document.getElementById('body-garcon').innerHTML=periodos.map((p,i)=>`<tr><td>${labels[i]}</td><td>${fmtNum(qtds[i])}</td><td style="font-weight:500">${fmtBRL(fats[i])}</td><td>${fmtBRL(qtds[i]>0?fats[i]/qtds[i]:0)}</td><td>${fmtPct(totFat>0?fats[i]/totFat*100:0)}</td></tr>`).join('');
+ renderChartGarconsRanking(ranking)
 }
 
-function closeGarconPerfil(){
-  garconAtivo=null;
-  document.getElementById('garcon-perfil').classList.remove('open');
-  const placeholder=document.getElementById('garcon-placeholder');
-  const perfilCard=document.getElementById('garcon-perfil-card');
-  if(placeholder)placeholder.style.display='flex';
-  if(perfilCard)perfilCard.style.display='none';
-  if(gscFatInst){gscFatInst.destroy();gscFatInst=null;}
-  if(gscItensInst){gscItensInst.destroy();gscItensInst=null;}
-  renderGarcons();
+function renderChartGarconsRanking(ranking) {
+ const ctx = $('chartGarconsRanking')
+ if (!ctx) return
+
+ destruir(chartGarconsRanking)
+
+ chartGarconsRanking = new Chart(ctx, {
+ type: 'bar',
+ data: {
+ labels: ranking.slice(0, 10).map(g => g.atendente),
+ datasets: [
+ {
+ label: 'Faturamento',
+ data: ranking.slice(0, 10).map(g => g.fat_real)
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
 }
 
-// ============================================================
-// CARDÁPIO & GRUPOS
-// ============================================================
-let cardapioSubTab2='grupos';
+function renderPerfilGarcom() {
+ const select = $('selectGarcomPerfil')
+ if (!select) return
 
-// ============================================================
-// ABA POR TAMANHO
-// ============================================================
-let tamLineInst=null;
-let tamRankingFiltro='GR';
+ const humanos = removerPlataformasGarcons(getGarconsFiltrados())
+ const nomes = [...new Set(humanos.map(g => g.atendente))]
+ .filter(Boolean)
+ .sort()
 
-function filterTamRanking(tam,btn){
-  tamRankingFiltro=tam;
-  document.querySelectorAll('#filter-tam-ranking .filter-btn').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
-  renderTamRanking(tam);
+ if (!select.dataset.loaded) {
+ select.innerHTML = `
+ <option value="">Selecione um atendente</option>
+ ${nomes.map(nome => `<option value="${nome}">${nome}</option>`).join('')}
+ `
+
+ select.dataset.loaded = '1'
+ select.onchange = () => {
+ garcomPerfilSelecionado = select.value
+ renderPerfilGarcom()
+ }
+ }
+
+ if (!garcomPerfilSelecionado && nomes.length) {
+ garcomPerfilSelecionado = nomes[0]
+ select.value = nomes[0]
+ }
+
+ const filtrado = humanos.filter(g => g.atendente === garcomPerfilSelecionado)
+ if (!filtrado.length) return
+
+ const fat = filtrado.reduce((acc, g) => acc + Number(g.fat_real || 0), 0)
+ const qtd = filtrado.reduce((acc, g) => acc + Number(g.quantidade || 0), 0)
+ const ticket = qtd ? fat / qtd : 0
+ const totalGeral = humanos.reduce((acc, g) => acc + Number(g.fat_real || 0), 0)
+ const pct = totalGeral ? fat / totalGeral : 0
+
+ $('perfil-fat').textContent = fmtBRL(fat)
+ $('perfil-ticket').textContent = fmtBRL(ticket)
+ $('perfil-qtd').textContent = fmtNum(qtd)
+ $('perfil-pct').textContent = fmtPct(pct)
+
+ renderChartPerfilGarcom(garcomPerfilSelecionado, filtrado)
+ renderChartPerfilGarcomPizza(fat, totalGeral - fat)
 }
 
-function renderTamanhoAba(){
-  const TAM_CFG={
-    GR:{label:'Grande',color:'#1E40AF',bg:'#EFF6FF',icon:'🔵'},
-    FM:{label:'Família',color:'#065F46',bg:'#EDF4EF',icon:'🟢'},
-    PQ:{label:'Pequena',color:'#92400E',bg:'#FEF3C7',icon:'🟠'},
-  };
+function renderChartPerfilGarcom(nome, dados) {
+ const ctx = $('chartPerfilGarcom')
+ if (!ctx) return
 
-  // Respeita filtro de período do select
-  const periodoFiltro=document.getElementById('sel-cardapio')?.value||'';
-  const produtosFiltrados=DATA.produtos.filter(d=>(d.is_pizza==='true'||d.is_pizza===true)&&(!periodoFiltro||d.periodo===periodoFiltro));
+ destruir(chartPerfilGarcom)
 
-  // Agregar dados
-  const byTam={GR:{qtd:0,val:0},FM:{qtd:0,val:0},PQ:{qtd:0,val:0}};
-  produtosFiltrados.forEach(d=>{
-    const t=d.tamanho||inferTamanho(d.material);
-    if(byTam[t]){byTam[t].qtd+=Number(d.qtd)||0;byTam[t].val+=Number(d.valor)||0;}
-  });
-  const totVal=Object.values(byTam).reduce((s,t)=>s+t.val,0)||1;
-  const totQtd=Object.values(byTam).reduce((s,t)=>s+t.qtd,0)||1;
-  const bestTam=Object.entries(byTam).sort((a,b)=>b[1].val-a[1].val)[0][0];
+ chartPerfilGarcom = new Chart(ctx, {
+ type: 'bar',
+ data: {
+ labels: dados.map(g => g.periodo),
+ datasets: [
+ {
+ label: nome,
+ data: dados.map(g => Number(g.fat_real || 0))
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
+}
 
-  // Faixa de cards
-  const faixaEl=document.getElementById('tam-faixa-cards');
-  if(faixaEl){
-    faixaEl.innerHTML=Object.entries(TAM_CFG).map(([k,cfg])=>{
-      const d=byTam[k];const isBest=k===bestTam;
-      return`<div style="background:${cfg.bg};border:${isBest?'2px solid '+cfg.color:'1px solid var(--b1)'};border-radius:14px;padding:18px 16px">
-        <div style="font-size:13px;font-weight:600;color:${cfg.color};margin-bottom:8px">${cfg.icon} ${cfg.label}${isBest?' ⭐':''}</div>
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:${cfg.color};letter-spacing:.3px">${fmtNum(Math.round(d.qtd))} un.</div>
-        <div style="font-size:12px;color:var(--ink2);margin-top:4px">${fmtBRL(d.val)}</div>
-        <div style="font-size:11px;color:var(--ink3);margin-top:2px">${fmtPct(d.qtd/totQtd*100)} das pizzas · ${fmtPct(d.val/totVal*100)} do fat.</div>
-        <div style="margin-top:10px;height:6px;background:rgba(0,0,0,.08);border-radius:3px;overflow:hidden">
-          <div style="height:100%;background:${cfg.color};border-radius:3px;width:${(d.val/totVal*100).toFixed(1)}%"></div>
-        </div>
-      </div>`;
-    }).join('');
-  }
+function renderChartPerfilGarcomPizza(fat, restante) {
+ const ctx = $('chartPerfilGarcomPizza')
+ if (!ctx) return
 
-  // Gráfico de linha — evolução por mês
-  const periodos=sortPeriodosMV([...new Set(produtosFiltrados.map(d=>d.periodo).filter(Boolean))]);
-  const labels=periodos.map(mvToLabel);
-  const datasets=Object.entries(TAM_CFG).map(([k,cfg])=>({
-    label:cfg.label,
-    data:periodos.map(p=>produtosFiltrados.filter(d=>d.periodo===p&&(d.tamanho||inferTamanho(d.material))===k).reduce((s,d)=>s+(Number(d.qtd)||0),0)),
-    borderColor:cfg.color,backgroundColor:cfg.color+'22',
-    borderWidth:2,tension:.3,fill:false,pointRadius:3,pointHoverRadius:6
-  }));
+ destruir(chartPerfilGarcomPizza)
 
-  const canvas=document.getElementById('tamLineChart');
-  if(canvas){
-    if(tamLineInst)tamLineInst.destroy();
-    tamLineInst=new Chart(canvas,{
-      type:'line',data:{labels,datasets},
-      options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmtNum(ctx.raw)} un.`}}},
-        scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,.05)'},ticks:{callback:v=>fmtNum(v)}}}}
-    });
-  }
+ chartPerfilGarcomPizza = new Chart(ctx, {
+ type: 'doughnut',
+ data: {
+ labels: [garcomPerfilSelecionado, 'Outros'],
+ datasets: [{ data: [fat, restante] }]
+ },
+ options: { responsive: true }
+ })
+}
 
-  // Tabela mensal
-  const tabelaEl=document.getElementById('tam-tabela-mensal');
-  if(tabelaEl){
-    let tbl=`<table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr style="background:var(--black)">
-        <th style="padding:8px 12px;text-align:left;color:rgba(255,255,255,.85);font-size:11px;font-weight:500;text-transform:uppercase">Mês</th>
-        <th style="padding:8px 12px;text-align:center;color:#93C5FD;font-size:11px" colspan="2">🔵 Grande</th>
-        <th style="padding:8px 12px;text-align:center;color:#6EE7B7;font-size:11px" colspan="2">🟢 Família</th>
-        <th style="padding:8px 12px;text-align:center;color:#FCD34D;font-size:11px" colspan="2">🟠 Pequena</th>
-        <th style="padding:8px 12px;text-align:center;color:rgba(255,255,255,.5);font-size:11px">Total</th>
+function renderGarconsCrescimento() {
+ if (!$('gar-crescimento-top')) return
+
+ const humanos = removerPlataformasGarcons(getGarconsFiltrados())
+ if (!humanos.length) return
+
+ const agrupado = {}
+
+ humanos.forEach(g => {
+ const nome = g.atendente || 'Sem nome'
+
+ if (!agrupado[nome]) {
+ agrupado[nome] = { atendente: nome, fat: 0, qtd: 0 }
+ }
+
+ agrupado[nome].fat += Number(g.fat_real || 0)
+ agrupado[nome].qtd += Number(g.quantidade || 0)
+ })
+
+ const lista = Object.values(agrupado).sort((a, b) => b.fat - a.fat)
+ const top = lista[0]
+ const media = lista.reduce((acc, g) => acc + g.fat, 0) / lista.length
+
+ $('gar-crescimento-top').textContent = top.atendente
+ $('gar-crescimento-fat').textContent = fmtBRL(top.fat)
+ $('gar-crescimento-qtd').textContent = fmtNum(lista.length)
+ $('gar-crescimento-media').textContent = fmtBRL(media)
+
+ $('tbodyGarcomCrescimento').innerHTML = humanos.map(g => {
+ const ticket = Number(g.quantidade || 0)
+ ? Number(g.fat_real || 0) / Number(g.quantidade)
+ : 0
+
+ return `
+ <tr>
+ <td>${g.atendente}</td>
+ <td>${g.periodo}</td>
+ <td>${fmtBRL(g.fat_real)}</td>
+ <td>${fmtNum(g.quantidade)}</td>
+ <td>${fmtBRL(ticket)}</td>
+ </tr>
+ `
+ }).join('')
+
+ renderChartGarcomCrescimento(lista)
+ renderChartGarcomParticipacao(lista)
+}
+
+function renderChartGarcomCrescimento(lista) {
+ const ctx = $('chartGarcomCrescimento')
+ if (!ctx) return
+
+ destruir(chartGarcomCrescimento)
+
+ chartGarcomCrescimento = new Chart(ctx, {
+ type: 'bar',
+ data: {
+ labels: lista.map(g => g.atendente),
+ datasets: [
+ {
+ label: 'Faturamento',
+ data: lista.map(g => g.fat)
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
+}
+
+function renderChartGarcomParticipacao(lista) {
+ const ctx = $('chartGarcomParticipacao')
+ if (!ctx) return
+
+ destruir(chartGarcomParticipacao)
+
+ chartGarcomParticipacao = new Chart(ctx, {
+ type: 'doughnut',
+ data: {
+ labels: lista.map(g => g.atendente),
+ datasets: [{ data: lista.map(g => g.fat) }]
+ },
+ options: { responsive: true }
+ })
+}
+
+// ===============================
+// DIA DA SEMANA
+// ===============================
+
+function getVendasDiariasFiltradas() {
+ const vendas = DATA.vendas_diarias || []
+
+ if (filtroDiaSemana === 'todos') return vendas
+
+ return vendas.filter(v =>
+ periodoEquivalente(v.periodo, filtroDiaSemana)
+ )
+}
+
+function getVendasDiariasMetasFiltradas() {
+  const vendas = DATA.vendas_diarias || []
+  const periodo = filtroMetas === 'todos'
+    ? periodoMaisRecente(vendas)
+    : filtroMetas
+
+  return vendas.filter(v =>
+    periodoEquivalente(v.periodo, periodo)
+  )
+}
+
+
+function nomeDiaSemana(dataISO) {
+ const dias = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+ const data = new Date(`${dataISO}T12:00:00`)
+ return dias[data.getDay()]
+}
+
+function agruparPorDiaSemana(vendas) {
+ const ordem = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+ const mapa = {}
+
+ vendas.forEach(v => {
+ const dia = nomeDiaSemana(v.data)
+
+ if (!mapa[dia]) {
+ mapa[dia] = { dia, fat_real: 0, pessoas: 0, ocorrencias: 0 }
+ }
+
+ mapa[dia].fat_real += Number(v.fat_real || 0)
+ mapa[dia].pessoas += Number(v.pessoas || 0)
+ mapa[dia].ocorrencias += 1
+ })
+
+ return ordem
+ .map(dia => mapa[dia])
+ .filter(Boolean)
+ .map(item => ({
+ ...item,
+ fat_medio: item.ocorrencias ? item.fat_real / item.ocorrencias : 0,
+ pessoas_media: item.ocorrencias ? item.pessoas / item.ocorrencias : 0,
+ ticket: item.pessoas ? item.fat_real / item.pessoas : 0
+ }))
+}
+
+function renderAbaDiaSemana() {
+  const vendasMesAtual = getVendasDiariasFiltradas()
+  const dados = agruparPorDiaSemana(vendasMesAtual)
+
+  if (!dados.length) return
+
+  const periodoAtual = filtroDiaSemana === 'todos'
+    ? periodoMaisRecente(DATA.vendas_diarias || [])
+    : filtroDiaSemana
+
+  const periodoAnt = periodoAnterior(periodoAtual, DATA.vendas_diarias || [])
+
+  const vendasMesAnterior = periodoAnt
+    ? (DATA.vendas_diarias || []).filter(v =>
+        periodoEquivalente(v.periodo, periodoAnt)
+      )
+    : []
+
+  const dadosAnterior = agruparPorDiaSemana(vendasMesAnterior)
+
+  const melhor = [...dados].sort((a, b) => b.fat_medio - a.fat_medio)[0]
+  const fatMedioGeral = dados.reduce((acc, d) => acc + d.fat_medio, 0) / dados.length
+  const pessoasMedia = dados.reduce((acc, d) => acc + d.pessoas_media, 0) / dados.length
+  const totalFat = dados.reduce((acc, d) => acc + d.fat_real, 0)
+  const totalPessoas = dados.reduce((acc, d) => acc + d.pessoas, 0)
+  const ticketGeral = totalPessoas ? totalFat / totalPessoas : 0
+
+  $('dia-melhor').textContent = melhor.dia
+  $('dia-fat-medio').textContent = fmtBRL(fatMedioGeral)
+  $('dia-pessoas').textContent = fmtNum(Math.round(pessoasMedia))
+  $('dia-ticket').textContent = fmtBRL(ticketGeral)
+
+  $('tbodyDiaSemana').innerHTML = dados.map(d => {
+    const ant = dadosAnterior.find(a => a.dia === d.dia)
+    const variacao = ant && ant.fat_medio
+      ? ((d.fat_medio - ant.fat_medio) / ant.fat_medio) * 100
+      : null
+
+    return `
+      <tr>
+        <td>${d.dia}</td>
+        <td>${fmtBRL(d.fat_medio)}</td>
+        <td>${fmtNum(Math.round(d.pessoas_media))}</td>
+        <td>${fmtBRL(d.ticket)}</td>
+        <td>${fmtNum(d.ocorrencias)}${variacao === null ? '' : ` • ${variacao.toFixed(1)}% vs ant.`}</td>
       </tr>
-      <tr style="background:var(--black3)">
-        <th style="padding:4px 12px"></th>
-        <th style="padding:4px 8px;text-align:center;color:rgba(255,255,255,.5);font-size:10px;font-weight:400">Qtd</th>
-        <th style="padding:4px 8px;text-align:center;color:rgba(255,255,255,.5);font-size:10px;font-weight:400">Fat.</th>
-        <th style="padding:4px 8px;text-align:center;color:rgba(255,255,255,.5);font-size:10px;font-weight:400">Qtd</th>
-        <th style="padding:4px 8px;text-align:center;color:rgba(255,255,255,.5);font-size:10px;font-weight:400">Fat.</th>
-        <th style="padding:4px 8px;text-align:center;color:rgba(255,255,255,.5);font-size:10px;font-weight:400">Qtd</th>
-        <th style="padding:4px 8px;text-align:center;color:rgba(255,255,255,.5);font-size:10px;font-weight:400">Fat.</th>
-        <th style="padding:4px 8px;text-align:center;color:rgba(255,255,255,.5);font-size:10px;font-weight:400">Qtd</th>
-      </tr></thead><tbody>`;
+    `
+  }).join('')
 
-    periodos.forEach(p=>{
-      const rows=produtosFiltrados.filter(d=>d.periodo===p);
-      const gr={qtd:rows.filter(d=>(d.tamanho||inferTamanho(d.material))==='GR').reduce((s,d)=>s+(Number(d.qtd)||0),0),val:rows.filter(d=>(d.tamanho||inferTamanho(d.material))==='GR').reduce((s,d)=>s+(Number(d.valor)||0),0)};
-      const fm={qtd:rows.filter(d=>(d.tamanho||inferTamanho(d.material))==='FM').reduce((s,d)=>s+(Number(d.qtd)||0),0),val:rows.filter(d=>(d.tamanho||inferTamanho(d.material))==='FM').reduce((s,d)=>s+(Number(d.valor)||0),0)};
-      const pq={qtd:rows.filter(d=>(d.tamanho||inferTamanho(d.material))==='PQ').reduce((s,d)=>s+(Number(d.qtd)||0),0),val:rows.filter(d=>(d.tamanho||inferTamanho(d.material))==='PQ').reduce((s,d)=>s+(Number(d.valor)||0),0)};
-      const totQ=gr.qtd+fm.qtd+pq.qtd;
-      const maxQ=Math.max(gr.qtd,fm.qtd,pq.qtd);
-      const cell=(d,color)=>`<td style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--b1);font-weight:${d.qtd===maxQ?'600':'400'};color:${d.qtd===maxQ?color:'var(--ink2)'}">${fmtNum(Math.round(d.qtd))}</td><td style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--b1);color:var(--ink3);font-size:11px">${fmtBRL(d.val)}</td>`;
-      tbl+=`<tr><td style="padding:6px 12px;font-weight:500;color:var(--ink);border-bottom:1px solid var(--b1)">${mvToLabel(p)}</td>${cell(gr,'#1E40AF')}${cell(fm,'#065F46')}${cell(pq,'#92400E')}<td style="padding:6px 8px;text-align:center;border-bottom:1px solid var(--b1);color:var(--ink3);font-size:11px">${fmtNum(Math.round(totQ))}</td></tr>`;
-    });
+  renderChartDiaSemanaFat(dados)
+  renderChartDiaSemanaTicket(dados)
+  renderChartDiaSemanaComparativo(dados, dadosAnterior, periodoAtual, periodoAnt)
+}
 
-    // Linha de média
-    const n=periodos.length||1;
-    const avgGrQ=byTam.GR.qtd/n,avgFmQ=byTam.FM.qtd/n,avgPqQ=byTam.PQ.qtd/n;
-    tbl+=`<tr style="background:var(--tealb)"><td style="padding:6px 12px;font-weight:600;color:var(--teal)">Média mensal</td>
-      <td style="padding:6px 8px;text-align:center;font-weight:600;color:var(--teal)">${fmtNum(Math.round(avgGrQ))}</td><td style="padding:6px 8px;text-align:center;color:var(--ink3);font-size:11px">${fmtBRL(byTam.GR.val/n)}</td>
-      <td style="padding:6px 8px;text-align:center;font-weight:600;color:var(--teal)">${fmtNum(Math.round(avgFmQ))}</td><td style="padding:6px 8px;text-align:center;color:var(--ink3);font-size:11px">${fmtBRL(byTam.FM.val/n)}</td>
-      <td style="padding:6px 8px;text-align:center;font-weight:600;color:var(--teal)">${fmtNum(Math.round(avgPqQ))}</td><td style="padding:6px 8px;text-align:center;color:var(--ink3);font-size:11px">${fmtBRL(byTam.PQ.val/n)}</td>
-      <td style="padding:6px 8px;text-align:center;font-weight:600;color:var(--teal)">${fmtNum(Math.round((byTam.GR.qtd+byTam.FM.qtd+byTam.PQ.qtd)/n))}</td></tr>`;
-    tbl+='</tbody></table>';
-    tabelaEl.innerHTML=tbl;
+function renderChartDiaSemanaComparativo(dadosAtual, dadosAnterior, periodoAtual, periodoAnt) {
+  const ctx = $('chartDiaSemanaComparativo')
+  if (!ctx) return
+
+  destruir(chartDiaSemanaComparativo)
+
+  const ordem = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+  const mapaAtual = {}
+  const mapaAnterior = {}
+
+  dadosAtual.forEach(d => {
+    mapaAtual[d.dia] = d.fat_medio
+  })
+
+  dadosAnterior.forEach(d => {
+    mapaAnterior[d.dia] = d.fat_medio
+  })
+
+  chartDiaSemanaComparativo = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ordem,
+      datasets: [
+        {
+          label: periodoParaLabel(periodoAtual || 'Atual'),
+          data: ordem.map(dia => Number(mapaAtual[dia] || 0))
+        },
+        {
+          label: periodoAnt ? periodoParaLabel(periodoAnt) : 'Mês anterior',
+          data: ordem.map(dia => Number(mapaAnterior[dia] || 0))
+        }
+      ]
+    },
+    options: { responsive: true }
+  })
+}
+
+function renderChartDiaSemanaFat(dados) {
+ const ctx = $('chartDiaSemanaFat')
+ if (!ctx) return
+
+ destruir(chartDiaSemanaFat)
+
+ chartDiaSemanaFat = new Chart(ctx, {
+ type: 'bar',
+ data: {
+ labels: dados.map(d => d.dia),
+ datasets: [
+ {
+ label: 'Faturamento médio',
+ data: dados.map(d => d.fat_medio)
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
+}
+
+function renderChartDiaSemanaTicket(dados) {
+ const ctx = $('chartDiaSemanaTicket')
+ if (!ctx) return
+
+ destruir(chartDiaSemanaTicket)
+
+ chartDiaSemanaTicket = new Chart(ctx, {
+ type: 'line',
+ data: {
+ labels: dados.map(d => d.dia),
+ datasets: [
+ {
+ label: 'Ticket médio',
+ data: dados.map(d => d.ticket)
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
+}
+
+function renderDiaSemanaDetalhe() {
+ const select = $('selectDiaSemana')
+ if (!select) return
+
+ if (!select.dataset.loaded) {
+ select.onchange = renderDiaSemanaDetalhe
+ select.dataset.loaded = '1'
+ }
+
+ const diaSelecionado = select.value || 'Segunda'
+
+ const vendas = getVendasDiariasFiltradas()
+ .filter(v => nomeDiaSemana(v.data) === diaSelecionado)
+ .sort((a, b) => new Date(a.data) - new Date(b.data))
+
+ if (!vendas.length) {
+ $('dia-det-fat').textContent = '—'
+ $('dia-det-fat-medio').textContent = '—'
+ $('dia-det-pessoas').textContent = '—'
+ $('dia-det-ticket').textContent = '—'
+ $('tbodyDiaDetalhe').innerHTML = `
+ <tr>
+ <td colspan="4" style="text-align:left">
+ Sem dados para o dia selecionado.
+ </td>
+ </tr>
+ `
+ destruir(chartDiaDetalheFat)
+ destruir(chartDiaDetalhePessoas)
+ return
+ }
+
+ const fatTotal = vendas.reduce((acc, v) => acc + Number(v.fat_real || 0), 0)
+ const pessoasTotal = vendas.reduce((acc, v) => acc + Number(v.pessoas || 0), 0)
+ const fatMedio = fatTotal / vendas.length
+ const pessoasMedia = pessoasTotal / vendas.length
+ const ticketMedio = pessoasTotal ? fatTotal / pessoasTotal : 0
+
+ $('dia-det-fat').textContent = fmtBRL(fatTotal)
+ $('dia-det-fat-medio').textContent = fmtBRL(fatMedio)
+ $('dia-det-pessoas').textContent = fmtNum(Math.round(pessoasMedia))
+ $('dia-det-ticket').textContent = fmtBRL(ticketMedio)
+
+ $('tbodyDiaDetalhe').innerHTML = vendas.map(v => {
+ const ticket = Number(v.pessoas || 0)
+ ? Number(v.fat_real || 0) / Number(v.pessoas)
+ : 0
+
+ return `
+ <tr>
+ <td>${formatarDataBR(v.data)}</td>
+ <td>${fmtBRL(v.fat_real)}</td>
+ <td>${fmtNum(v.pessoas)}</td>
+ <td>${fmtBRL(ticket)}</td>
+ </tr>
+ `
+ }).join('')
+
+ renderChartDiaDetalheFat(vendas)
+ renderChartDiaDetalhePessoas(vendas)
+}
+
+function renderChartDiaDetalheFat(vendas) {
+ const ctx = $('chartDiaDetalheFat')
+ if (!ctx) return
+
+ destruir(chartDiaDetalheFat)
+
+ chartDiaDetalheFat = new Chart(ctx, {
+ type: 'line',
+ data: {
+ labels: vendas.map(v => formatarDataBR(v.data)),
+ datasets: [
+ {
+ label: 'Faturamento',
+ data: vendas.map(v => Number(v.fat_real || 0))
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
+}
+
+function renderChartDiaDetalhePessoas(vendas) {
+ const ctx = $('chartDiaDetalhePessoas')
+ if (!ctx) return
+
+ destruir(chartDiaDetalhePessoas)
+
+ chartDiaDetalhePessoas = new Chart(ctx, {
+ type: 'bar',
+ data: {
+ labels: vendas.map(v => formatarDataBR(v.data)),
+ datasets: [
+ {
+ label: 'Pessoas',
+ data: vendas.map(v => Number(v.pessoas || 0))
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
+}
+
+// ===============================
+// METAS SUBABAS
+// ===============================
+
+function renderMetasDiarias() {
+  const vendas = getVendasDiariasMetasFiltradas()
+
+  if (!vendas.length) {
+    if ($('meta-dia-top')) $('meta-dia-top').textContent = '—'
+    if ($('meta-dia-fat')) $('meta-dia-fat').textContent = '—'
+    if ($('meta-dia-media')) $('meta-dia-media').textContent = '—'
+    if ($('meta-dia-qtd')) $('meta-dia-qtd').textContent = '0'
+    if ($('meta-dia-fat-realizado')) $('meta-dia-fat-realizado').textContent = '—'
+    if ($('meta-dia-meta-prevista')) $('meta-dia-meta-prevista').textContent = '—'
+    if ($('meta-dia-pct-atingido')) $('meta-dia-pct-atingido').textContent = '—'
+    if ($('meta-dia-dias-corridos')) $('meta-dia-dias-corridos').textContent = '0'
+    if ($('tbodyMetaDiaria')) $('tbodyMetaDiaria').innerHTML = ''
+    destruir(chartMetaDiariaFat)
+    destruir(chartMetaDiariaPessoas)
+    destruir(chartMetaDiariaComparativo)
+    return
   }
 
-  // Ranking inicial
-  renderTamRanking(tamRankingFiltro);
+  const periodoAtual = filtroMetas === 'todos'
+    ? periodoMaisRecente(DATA.resumo_mensal || [])
+    : filtroMetas
+
+  const resumoMes = getResumoMetaPorPeriodo(periodoAtual)
+  const metaTotal = Number(resumoMes?.meta_total || 0)
+  const diasMes = diasNoMesDoPeriodo(periodoAtual)
+  const metaDiaria = diasMes ? metaTotal / diasMes : 0
+
+  const ordenado = [...vendas].sort((a, b) => new Date(a.data) - new Date(b.data))
+  const melhor = [...ordenado].sort((a, b) => Number(b.fat_real || 0) - Number(a.fat_real || 0))[0]
+  const fatRealizado = ordenado.reduce((acc, d) => acc + Number(d.fat_real || 0), 0)
+  const diasCorridos = ordenado.length
+  const metaPrevistaAteHoje = metaDiaria * diasCorridos
+  const pctAtingido = metaPrevistaAteHoje ? fatRealizado / metaPrevistaAteHoje : 0
+  const media = diasCorridos ? fatRealizado / diasCorridos : 0
+
+  $('meta-dia-top').textContent = formatarDataBR(melhor.data)
+  $('meta-dia-fat').textContent = fmtBRL(melhor.fat_real)
+  $('meta-dia-media').textContent = fmtBRL(media)
+  $('meta-dia-qtd').textContent = fmtNum(diasCorridos)
+
+  if ($('meta-dia-fat-realizado')) $('meta-dia-fat-realizado').textContent = fmtBRL(fatRealizado)
+  if ($('meta-dia-meta-prevista')) $('meta-dia-meta-prevista').textContent = fmtBRL(metaPrevistaAteHoje)
+  if ($('meta-dia-pct-atingido')) $('meta-dia-pct-atingido').textContent = fmtPct(pctAtingido)
+  if ($('meta-dia-dias-corridos')) $('meta-dia-dias-corridos').textContent = `${fmtNum(diasCorridos)} / ${fmtNum(diasMes)}`
+
+  let acumuladoReal = 0
+
+  $('tbodyMetaDiaria').innerHTML = ordenado.map((d, index) => {
+    const ticket = Number(d.pessoas || 0)
+      ? Number(d.fat_real || 0) / Number(d.pessoas)
+      : 0
+
+    acumuladoReal += Number(d.fat_real || 0)
+
+    const metaPrevistaDia = metaDiaria * (index + 1)
+    const pctDia = metaPrevistaDia ? acumuladoReal / metaPrevistaDia : 0
+
+    return `
+      <tr>
+        <td>${formatarDataBR(d.data)}</td>
+        <td>${fmtBRL(d.fat_real)} / ${fmtBRL(metaPrevistaDia)}</td>
+        <td>${fmtNum(d.pessoas)}</td>
+        <td>${fmtBRL(ticket)} • ${fmtPct(pctDia)}</td>
+      </tr>
+    `
+  }).join('')
+
+  renderChartMetaDiariaFat(ordenado)
+  renderChartMetaDiariaPessoas(ordenado)
+  renderChartMetaDiariaComparativo(ordenado, metaDiaria)
 }
 
-function renderTamRanking(tam){
-  const TAM_CFG={GR:{label:'Grande',color:'#1E40AF'},FM:{label:'Família',color:'#065F46'},PQ:{label:'Pequena',color:'#92400E'}};
-  const cfg=TAM_CFG[tam];
-  const el=document.getElementById('tam-ranking');if(!el)return;
+function renderChartMetaDiariaComparativo(dados, metaDiaria) {
+  const ctx = $('chartMetaDiariaComparativo')
+  if (!ctx) return
 
-  let agg={};
-  DATA.produtos.filter(d=>inferTamanho(d.material)===tam).forEach(d=>{
-    const k=d.material;
-    if(!agg[k])agg[k]={material:k,qtd:0,valor:0};
-    agg[k].qtd+=Number(d.qtd)||0;
-    agg[k].valor+=Number(d.valor)||0;
-  });
-  const sorted=Object.values(agg).sort((a,b)=>b.qtd-a.qtd);
-  const maxQ=Math.max(...sorted.map(d=>d.qtd),1);
-  const totQ=sorted.reduce((s,d)=>s+d.qtd,0)||1;
+  destruir(chartMetaDiariaComparativo)
 
-  el.innerHTML=`<div style="display:flex;flex-direction:column;gap:6px">${sorted.map((d,i)=>`
-    <div style="display:flex;align-items:center;gap:10px">
-      <span style="width:22px;height:22px;border-radius:50%;background:${i<3?cfg.color:'var(--b1)'};color:${i<3?'#fff':'var(--ink3)'};display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0">${i+1}</span>
-      <div style="width:180px;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0">${d.material}</div>
-      <div style="flex:1;height:8px;background:var(--b1);border-radius:4px;overflow:hidden">
-        <div style="height:100%;border-radius:4px;background:${cfg.color};width:${(d.qtd/maxQ*100).toFixed(1)}%"></div>
-      </div>
-      <div style="font-size:11px;color:var(--ink3);width:110px;text-align:right;flex-shrink:0">${fmtNum(Math.round(d.qtd))} un. · ${fmtPct(d.qtd/totQ*100)}</div>
-    </div>`).join('')}</div>`;
+  let acumuladoReal = 0
+
+  const realizadoAcumulado = dados.map(d => {
+    acumuladoReal += Number(d.fat_real || 0)
+    return acumuladoReal
+  })
+
+  const metaAcumulada = dados.map((_, index) =>
+    metaDiaria * (index + 1)
+  )
+
+  chartMetaDiariaComparativo = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: dados.map(d => formatarDataBR(d.data)),
+      datasets: [
+        {
+          label: 'Realizado acumulado',
+          data: realizadoAcumulado
+        },
+        {
+          label: 'Meta prevista acumulada',
+          data: metaAcumulada
+        }
+      ]
+    },
+    options: { responsive: true }
+  })
 }
 
-function switchCardapioTab(tab,btn){
-  const crEl=document.getElementById('subtab-crescimento');
-  if(tab==='crescimento'){
-    ['grupos','tamanho','produtos','cardapio'].forEach(t=>{const e=document.getElementById('subtab-'+t);if(e)e.style.display='none';});
-    if(crEl)crEl.style.display='block';
-    document.querySelectorAll('#sec-cardapio .subtab').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');renderCrescimento();return;
-  }
-  if(crEl)crEl.style.display='none';
-  cardapioSubTab2=tab;
-  document.querySelectorAll('.subtab').forEach(b=>b.classList.remove('active'));btn.classList.add('active');
-  document.getElementById('subtab-grupos').style.display=tab==='grupos'?'block':'none';
-  document.getElementById('subtab-tamanho').style.display=tab==='tamanho'?'block':'none';
-  document.getElementById('subtab-produtos').style.display=tab==='produtos'?'block':'none';
-  document.getElementById('subtab-cardapio').style.display=tab==='cardapio'?'block':'none';
-  if(tab==='cardapio')renderCardapioMenu('');
-  else if(tab==='tamanho')renderTamanhoAba();
-  else renderCardapio();
+function renderChartMetaDiariaFat(dados) {
+ const ctx = $('chartMetaDiariaFat')
+ if (!ctx) return
+
+ destruir(chartMetaDiariaFat)
+
+ chartMetaDiariaFat = new Chart(ctx, {
+ type: 'bar',
+ data: {
+ labels: dados.map(d => formatarDataBR(d.data)),
+ datasets: [
+ {
+ label: 'Faturamento',
+ data: dados.map(d => Number(d.fat_real || 0))
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
 }
 
-function clearCardapio(){document.getElementById('sel-cardapio').value='';renderCardapio();}
+function renderChartMetaDiariaPessoas(dados) {
+ const ctx = $('chartMetaDiariaPessoas')
+ if (!ctx) return
 
-function renderCardapio(){
-  if(cardapioSubTab2==='cardapio'){renderCardapioMenu(cardapioTamFiltro);return;}
-  if(cardapioSubTab2==='produtos'){renderProdutos();return;}
-  const p=document.getElementById('sel-cardapio').value;
-  updateClearBtn('clear-cardapio',p);
-  let rows=p?DATA.grupos.filter(d=>d.periodo===p):DATA.grupos;
-  let agg={};rows.forEach(d=>{if(!agg[d.grupo])agg[d.grupo]={grupo:d.grupo,qtd:0,faturado:0};agg[d.grupo].qtd+=Number(d.qtd)||0;agg[d.grupo].faturado+=Number(d.faturado)||0;});
-  const totF=Object.values(agg).reduce((s,d)=>s+d.faturado,0)||1;
-  let aggRows=Object.values(agg).filter(d=>d.faturado>0).map(d=>({...d,fat_pct:d.faturado/totF*100}));
-  const sorted=getSorted('grupos',aggRows);updateSortIcons('grupos');
-  const maxF=Math.max(...aggRows.map(d=>d.faturado),1),maxQ=Math.max(...aggRows.map(d=>d.qtd),1);
-  document.getElementById('chart-grupos-fat').innerHTML=sorted.slice(0,12).map(d=>`<div class="bar-row"><div class="bar-label" title="${d.grupo}">${d.grupo}</div><div class="bar-track"><div class="bar-inner red" style="width:${(d.faturado/maxF*100).toFixed(1)}%"></div></div><div class="bar-val">${fmtBRL(d.faturado)}</div></div>`).join('');
-  document.getElementById('chart-grupos-qtd').innerHTML=sorted.slice().sort((a,b)=>b.qtd-a.qtd).slice(0,12).map(d=>`<div class="bar-row"><div class="bar-label" title="${d.grupo}">${d.grupo}</div><div class="bar-track"><div class="bar-inner green" style="width:${(d.qtd/maxQ*100).toFixed(1)}%"></div></div><div class="bar-val">${fmtNum(d.qtd)}</div></div>`).join('');
-  document.getElementById('body-grupos').innerHTML=sorted.map(d=>`<tr><td>${d.grupo}</td><td>${fmtNum(d.qtd)}</td><td style="font-weight:500">${fmtBRL(d.faturado)}</td><td><div class="bar-cell"><div class="bar-bg"><div class="bar-fill red" style="width:${Math.min(d.fat_pct,100).toFixed(1)}%"></div></div><span class="pct-val">${fmtPct(d.fat_pct)}</span></div></td></tr>`).join('');
-  document.getElementById('badge-cardapio').textContent=`${aggRows.length} categorias`;
-  document.getElementById('footer-grupos').innerHTML=`<span>${aggRows.length} categorias</span><span>Total: ${fmtBRL(totF)}</span>`;
+ destruir(chartMetaDiariaPessoas)
+
+ chartMetaDiariaPessoas = new Chart(ctx, {
+ type: 'line',
+ data: {
+ labels: dados.map(d => formatarDataBR(d.data)),
+ datasets: [
+ {
+ label: 'Pessoas',
+ data: dados.map(d => Number(d.pessoas || 0))
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
 }
 
-// Produtos
-function inferTamanho(m){const u=m.toUpperCase();if(u.endsWith(' GR')||/ GR /.test(u))return'GR';if(u.endsWith(' FM')||/ FM /.test(u))return'FM';if(u.endsWith(' PQ')||/ PQ /.test(u))return'PQ';if(u.endsWith(' MD')||/ MD /.test(u))return'MD';return'OUTRO';}
-function tamLabel(t){return{GR:'Grande',FM:'Família',PQ:'Pequena',MD:'Média',OUTRO:'—'}[t]||'—';}
-function tamColor(t){return{GR:'#1E40AF',FM:'#065F46',PQ:'#92400E',MD:'#374151',OUTRO:'var(--ink3)'}[t]||'var(--ink3)';}
+function renderMetasCanais() {
+ const resumo = getDadosFiltrados()
+ if (!resumo.length) return
 
-function filterProdTam(tam,btn){FILTER_PROD_TAM=tam;document.querySelectorAll('#filter-prod-tam .filter-btn').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderProdutos();}
+ const totalSalao = resumo.reduce((acc, r) => acc + Number(r.fat_real_salao || 0), 0)
+ const totalDelivery = resumo.reduce((acc, r) => acc + Number(r.fat_real_delivery || 0), 0)
+ const total = totalSalao + totalDelivery
 
-function populateProdGrupos(){
-  const sel=document.getElementById('filter-prod-grupo');if(!sel)return;
-  const grupos=[...new Set(DATA.produtos.map(d=>d.grupo).filter(Boolean))].sort();
-  sel.innerHTML='<option value="">Todas</option>'+grupos.map(g=>`<option value="${g}">${g}</option>`).join('');
+ $('meta-canal-delivery').textContent = fmtBRL(totalDelivery)
+ $('meta-canal-salao').textContent = fmtBRL(totalSalao)
+ $('meta-canal-delivery-pct').textContent = fmtPct(total ? totalDelivery / total : 0)
+ $('meta-canal-salao-pct').textContent = fmtPct(total ? totalSalao / total : 0)
+
+ renderChartMetaCanaisPizza(totalSalao, totalDelivery)
+ renderChartMetaCanaisBar(totalSalao, totalDelivery)
 }
 
-function renderProdutos(){
-  const p=document.getElementById('sel-cardapio').value;
-  const grpSel=document.getElementById('filter-prod-grupo')?.value||'';
-  let rows=p?DATA.produtos.filter(d=>d.periodo===p):DATA.produtos;
-  let agg={};rows.forEach(d=>{const k=d.material+'||'+d.grupo;if(!agg[k])agg[k]={material:d.material,grupo:d.grupo,qtd:0,valor:0,tamanho:inferTamanho(d.material)};agg[k].qtd+=Number(d.qtd)||0;agg[k].valor+=Number(d.valor)||0;});
-  let aggRows=Object.values(agg);
-  if(FILTER_PROD_TAM&&FILTER_PROD_TAM!=='OUTRO')aggRows=aggRows.filter(d=>d.tamanho===FILTER_PROD_TAM);
-  else if(FILTER_PROD_TAM==='OUTRO')aggRows=aggRows.filter(d=>d.tamanho==='OUTRO');
-  if(grpSel)aggRows=aggRows.filter(d=>d.grupo===grpSel);
-  const totF=aggRows.reduce((s,d)=>s+d.valor,0)||1;
-  aggRows=aggRows.map(d=>({...d,fat_pct:d.valor/totF*100}));
-  const sorted=getSorted('produtos',aggRows);updateSortIcons('produtos');
-  document.getElementById('body-produtos').innerHTML=sorted.map((d,i)=>`<tr><td style="text-align:center"><span class="rank-num${i<3?' top3':''}">${i+1}</span></td><td>${d.material}</td><td><span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;background:${tamColor(d.tamanho)}22;color:${tamColor(d.tamanho)}">${tamLabel(d.tamanho)}</span></td><td style="font-size:11px;color:var(--ink3)">${d.grupo}</td><td>${fmtNum(d.qtd)}</td><td style="font-weight:500">${fmtBRL(d.valor)}</td><td><div class="bar-cell"><div class="bar-bg"><div class="bar-fill red" style="width:${Math.min(d.fat_pct,100).toFixed(1)}%"></div></div><span class="pct-val">${fmtPct(d.fat_pct)}</span></div></td></tr>`).join('');
-  document.getElementById('badge-cardapio').textContent=`${aggRows.length} produtos`;
-  const footer=document.getElementById('footer-produtos');if(footer)footer.innerHTML=`<span>${aggRows.length} produtos</span><span>Total: ${fmtBRL(totF)}</span>`;
+function renderChartMetaCanaisPizza(salao, delivery) {
+ const ctx = $('chartMetaCanaisPizza')
+ if (!ctx) return
+
+ destruir(chartMetaCanaisPizza)
+
+ chartMetaCanaisPizza = new Chart(ctx, {
+ type: 'doughnut',
+ data: {
+ labels: ['Salão', 'Delivery'],
+ datasets: [{ data: [salao, delivery] }]
+ },
+ options: { responsive: true }
+ })
 }
 
-// Cardápio Menu
-function filtrarCardapio(tam,btn){cardapioTamFiltro=tam;document.querySelectorAll('#cardapio-filtros .filter-btn').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderCardapioMenu(tam);}
+function renderChartMetaCanaisBar(salao, delivery) {
+ const ctx = $('chartMetaCanaisBar')
+ if (!ctx) return
 
-function renderFaixaTamanhos(){
-  const el=document.getElementById('cardapio-tam-faixa');
-  if(!el||!DATA.produtos||!DATA.produtos.length)return;
-  const TAM={GR:{label:'Grande',color:'var(--blue)',bg:'var(--blueb)',qtd:0,val:0},FM:{label:'Família',color:'var(--green)',bg:'var(--greenb)',qtd:0,val:0},PQ:{label:'Pequena',color:'var(--amber)',bg:'var(--amberb)',qtd:0,val:0}};
-  DATA.produtos.forEach(d=>{
-    const t=inferTamanho(d.material);
-    if(TAM[t]){TAM[t].qtd+=Number(d.qtd)||0;TAM[t].val+=Number(d.valor)||0;}
-  });
-  const totVal=Object.values(TAM).reduce((s,t)=>s+t.val,0)||1;
-  const totQtd=Object.values(TAM).reduce((s,t)=>s+t.qtd,0)||1;
-  const best=Object.entries(TAM).sort((a,b)=>b[1].val-a[1].val)[0][0];
-  el.innerHTML=Object.entries(TAM).map(([k,t])=>`
-    <div style="background:${t.bg};border:${k===best?'2px solid '+t.color:'1px solid var(--b1)'};border-radius:12px;padding:14px 16px">
-      <div style="font-size:10px;font-weight:700;color:${t.color};text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">${t.label}${k===best?' ⭐':''}</div>
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:${t.color};letter-spacing:.3px">${fmtBRL(t.val)}</div>
-      <div style="font-size:11px;color:var(--ink3);margin-top:3px">${fmtPct(t.val/totVal*100)} do fat. · ${fmtNum(Math.round(t.qtd))} un.</div>
-      <div style="margin-top:8px;height:5px;background:var(--b1);border-radius:3px;overflow:hidden">
-        <div style="height:100%;background:${t.color};border-radius:3px;width:${(t.val/totVal*100).toFixed(1)}%"></div>
-      </div>
-    </div>`).join('');
+ destruir(chartMetaCanaisBar)
 
-  // Tabela mensal por tamanho
-  const mensal=document.getElementById('cardapio-tam-mensal');
-  if(mensal&&DATA.produtos.length){
-    const periodos=sortPeriodosMV([...new Set(DATA.produtos.filter(d=>d.is_pizza==='true'||d.is_pizza===true).map(d=>d.periodo).filter(Boolean))]);
-    let tbl=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr style="background:var(--black)">
-        <th style="padding:8px 12px;text-align:left;color:rgba(255,255,255,.85);font-size:11px;font-weight:500;text-transform:uppercase">Mês</th>
-        <th style="padding:8px 12px;text-align:center;color:#1E40AF;font-size:11px;font-weight:600">🔵 Grande</th>
-        <th style="padding:8px 12px;text-align:center;color:#065F46;font-size:11px;font-weight:600">🟢 Família</th>
-        <th style="padding:8px 12px;text-align:center;color:#92400E;font-size:11px;font-weight:600">🟠 Pequena</th>
-        <th style="padding:8px 12px;text-align:center;color:rgba(255,255,255,.6);font-size:11px;font-weight:500">Total</th>
-      </tr></thead><tbody>`;
-    periodos.forEach(p=>{
-      const rowData=DATA.produtos.filter(d=>d.periodo===p);
-      const gr=rowData.filter(d=>(d.tamanho||inferTamanho(d.material))==='GR').reduce((s,d)=>s+(Number(d.qtd)||0),0);
-      const fm=rowData.filter(d=>(d.tamanho||inferTamanho(d.material))==='FM').reduce((s,d)=>s+(Number(d.qtd)||0),0);
-      const pq=rowData.filter(d=>(d.tamanho||inferTamanho(d.material))==='PQ').reduce((s,d)=>s+(Number(d.qtd)||0),0);
-      const tot=gr+fm+pq||1;
-      const max=Math.max(gr,fm,pq);
-      const cell=(v,color)=>`<td style="padding:7px 12px;text-align:center;border-bottom:1px solid var(--b1)">
-        <div style="font-weight:${v===max?'600':'400'};color:${v===max?color:'var(--ink2)'};">${fmtNum(Math.round(v))}</div>
-        <div style="font-size:10px;color:var(--ink3)">${fmtPct(v/tot*100)}</div>
-      </td>`;
-      tbl+=`<tr><td style="padding:7px 12px;font-weight:500;color:var(--ink);border-bottom:1px solid var(--b1)">${mvToLabel(p)}</td>${cell(gr,'#1E40AF')}${cell(fm,'#065F46')}${cell(pq,'#92400E')}<td style="padding:7px 12px;text-align:center;border-bottom:1px solid var(--b1);color:var(--ink3);font-size:11px">${fmtNum(Math.round(tot))}</td></tr>`;
-    });
-    tbl+='</tbody></table></div>';
-    mensal.innerHTML=tbl;
-  }
+ chartMetaCanaisBar = new Chart(ctx, {
+ type: 'bar',
+ data: {
+ labels: ['Salão', 'Delivery'],
+ datasets: [
+ {
+ label: 'Faturamento',
+ data: [salao, delivery]
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
 }
 
-function renderCardapioMenu(tamFiltro){
-  const SECOES=['Mamma Mia','Saporito','Speciale','Piu Che Speciale','Dolce'];
-  renderFaixaTamanhos();
-  if(!DATA.cardapio||!DATA.cardapio.length){
-    document.getElementById('cardapio-content').innerHTML='<div style="padding:24px;color:var(--ink3);font-size:13px">Cardápio não carregado. Importe lp_cardapio no Supabase.</div>';return;
-  }
-  const html=SECOES.map(secao=>{
-    const itens=DATA.cardapio.filter(d=>d.secao===secao&&d.disponivel);if(!itens.length)return'';
-    const id='sec-'+secao.replace(/\s+/g,'-').toLowerCase();
-    const rows=itens.map(p=>{
-      let precos='';
-      if(!tamFiltro)precos=`<span style="font-size:11px;color:var(--ink3)">Peq: <b>R$${p.preco_peq}</b> · Gr: <b>R$${p.preco_gr}</b>${p.preco_fam?` · Fam: <b>R$${p.preco_fam}</b>`:''}</span>`;
-      else{const cols={peq:'preco_peq',gr:'preco_gr',fam:'preco_fam'};const lbls={peq:'Pequena',gr:'Grande',fam:'Família'};precos=`<span style="font-size:12px;font-weight:600;color:var(--red)">${lbls[tamFiltro]} R$${p[cols[tamFiltro]]||'—'}</span>`;}
-      return`<div class="cardapio-item"><div><div class="cardapio-item-nome">${p.sabor}</div><div class="cardapio-item-desc">${p.descricao||''}</div></div><div class="cardapio-preco">${precos}</div></div>`;
-    }).join('');
-    return`<div class="ceo-chart-card" style="margin-bottom:12px"><div class="cardapio-secao-hdr" onclick="toggleSecao('${id}')"><div class="cardapio-secao-nome">${secao}</div><div style="display:flex;align-items:center;gap:10px"><span style="font-size:11px;color:var(--ink3)">${itens.length} sabores</span><span id="${id}-icon">▼</span></div></div><div id="${id}" style="margin-top:10px">${rows}</div></div>`;
-  }).join('');
-  document.getElementById('cardapio-content').innerHTML=html;
+function renderMetasHistorico() {
+ const dados = DATA.resumo_mensal || []
+ if (!dados.length) return
+
+ const ordenado = [...dados].sort((a, b) => periodoParaOrdem(a.periodo) - periodoParaOrdem(b.periodo))
+ const maior = [...ordenado].sort((a, b) => Number(b.fat_real_total || 0) - Number(a.fat_real_total || 0))[0]
+ const media = ordenado.reduce((acc, item) => acc + Number(item.fat_real_total || 0), 0) / ordenado.length
+
+ $('hist-maior-mes').textContent = maior.periodo
+ $('hist-maior-fat').textContent = fmtBRL(maior.fat_real_total)
+ $('hist-media').textContent = fmtBRL(media)
+ $('hist-periodos').textContent = fmtNum(ordenado.length)
+
+ renderChartHistoricoFat(ordenado)
+ renderChartHistoricoMeta(ordenado)
 }
 
-function toggleSecao(id){const el=document.getElementById(id);const icon=document.getElementById(id+'-icon');if(!el)return;const open=el.style.display!=='none';el.style.display=open?'none':'block';if(icon)icon.textContent=open?'▶':'▼';}
+function renderChartHistoricoFat(dados) {
+ const ctx = $('chartHistoricoFat')
+ if (!ctx) return
 
-// ============================================================
-// COMANDAS
-// ============================================================
-function clearComandas(){document.getElementById('sel-comandas').value='';renderComandas();}
-function renderComandas(){
-  const p=document.getElementById('sel-comandas').value;
-  let rows=p?DATA.comandas.filter(d=>d.periodo===p):DATA.comandas;
-  updateClearBtn('clear-comandas',p);
-  let agg={};rows.forEach(d=>{if(!agg[d.nome])agg[d.nome]={nome:d.nome,qtd_pedidos:0,total:0};agg[d.nome].qtd_pedidos+=Number(d.qtd_pedidos)||0;agg[d.nome].total+=Number(d.total)||0;});
-  const totF=Object.values(agg).reduce((s,d)=>s+d.total,0)||1;
-  let aggRows=Object.values(agg).map(d=>({...d,ticket_medio:d.qtd_pedidos>0?d.total/d.qtd_pedidos:0,percentual:d.total/totF*100}));
-  const sorted=getSorted('comandas',aggRows);updateSortIcons('comandas');
-  const maxF=Math.max(...aggRows.map(d=>d.total),1),maxQ=Math.max(...aggRows.map(d=>d.qtd_pedidos),1);
-  const CC={Mesa:'green',Delivery:'red',Balcao:'',Balcão:''};
-  document.getElementById('chart-cmd-fat').innerHTML=sorted.map(d=>`<div class="bar-row"><div class="bar-label">${d.nome}</div><div class="bar-track"><div class="bar-inner ${CC[d.nome]||''}" style="width:${(d.total/maxF*100).toFixed(1)}%"></div></div><div class="bar-val">${fmtBRL(d.total)}</div></div>`).join('');
-  document.getElementById('chart-cmd-qtd').innerHTML=sorted.map(d=>`<div class="bar-row"><div class="bar-label">${d.nome}</div><div class="bar-track"><div class="bar-inner ${CC[d.nome]||''}" style="width:${(d.qtd_pedidos/maxQ*100).toFixed(1)}%"></div></div><div class="bar-val">${fmtNum(d.qtd_pedidos)}</div></div>`).join('');
-  document.getElementById('body-comandas').innerHTML=sorted.map(d=>`<tr><td>${d.nome}</td><td>${fmtNum(d.qtd_pedidos)}</td><td style="font-weight:500">${fmtBRL(d.total)}</td><td>${fmtBRL(d.ticket_medio)}</td><td><div class="bar-cell"><div class="bar-bg"><div class="bar-fill ${CC[d.nome]||''}" style="width:${Math.min(d.percentual,100).toFixed(1)}%"></div></div><span class="pct-val">${fmtPct(d.percentual)}</span></div></td></tr>`).join('');
-  document.getElementById('footer-comandas').innerHTML=`<span>${aggRows.length} tipos</span><span>Total: ${fmtBRL(totF)}</span><span>Pedidos: ${fmtNum(Object.values(agg).reduce((s,d)=>s+d.qtd_pedidos,0))}</span>`;
+ destruir(chartHistoricoFat)
+
+ chartHistoricoFat = new Chart(ctx, {
+ type: 'line',
+ data: {
+ labels: dados.map(d => d.periodo),
+ datasets: [
+ {
+ label: 'Faturamento Real',
+ data: dados.map(d => Number(d.fat_real_total || 0))
+ },
+ {
+ label: 'Meta',
+ data: dados.map(d => Number(d.meta_total || 0))
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
 }
 
-// ============================================================
+function renderChartHistoricoMeta(dados) {
+ const ctx = $('chartHistoricoMeta')
+ if (!ctx) return
+
+ destruir(chartHistoricoMeta)
+
+ chartHistoricoMeta = new Chart(ctx, {
+ type: 'bar',
+ data: {
+ labels: dados.map(d => d.periodo),
+ datasets: [
+ {
+ label: '% Meta',
+ data: dados.map(d => Number(d.pct_meta_total || 0) * 100)
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
+}
+
+// ===============================
+// PRODUTOS
+// ===============================
+
+function normalizarGrupoVisual(grupo) {
+ const g = String(grupo || '')
+ .normalize('NFD')
+ .replace(/[\u0300-\u036f]/g, '')
+ .trim()
+ .toUpperCase()
+
+ if (
+ g === 'E.2.2 - PIZZA GRANDE' ||
+ g === 'E.2.2 - PIZZAS GRANDES'
+ ) {
+ return 'E.2.2 - PIZZAS GRANDES'
+ }
+
+ if (
+ g === 'Z - PIZZA FAMILIA' ||
+ g === 'Z - PIZZAS FAMILIA'
+ ) {
+ return 'Z - PIZZA FAMILIA'
+ }
+
+ if (
+ g === 'Z - PIZZA PEQUENA' ||
+ g === 'Z - PIZZAS PEQUENAS'
+ ) {
+ return 'Z - PIZZA PEQUENA'
+ }
+
+ return String(grupo || '').trim()
+}
+
+function getProdutosFiltrados() {
+ const produtos = DATA.produtos || []
+
+ const filtrados = filtroCardapio === 'todos'
+ ? produtos
+ : produtos.filter(p =>
+ periodoEquivalente(p.periodo, filtroCardapio)
+ )
+
+ return filtrados.map(p => ({
+ ...p,
+ grupo: normalizarGrupoVisual(p.grupo)
+ }))
+}
+
+function agruparProdutos(produtos) {
+ const mapa = {}
+
+ produtos.forEach(p => {
+ const chave = `${p.produto}|||${p.grupo}|||${p.tamanho || 'OUTRO'}`
+
+ if (!mapa[chave]) {
+ mapa[chave] = {
+ produto: p.produto || 'Sem produto',
+ grupo: p.grupo || 'Sem grupo',
+ tamanho: p.tamanho || 'OUTRO',
+ quantidade: 0,
+ valor_total: 0
+ }
+ }
+
+ mapa[chave].quantidade += Number(p.quantidade || 0)
+ mapa[chave].valor_total += Number(p.valor_total || 0)
+ })
+
+ return Object.values(mapa)
+ .sort((a, b) => b.valor_total - a.valor_total)
+}
+
+function bindSubtabsProdutos() {
+ document.querySelectorAll('[data-prod-tab]').forEach(btn => {
+ btn.onclick = () => {
+ produtoSubaba = btn.dataset.prodTab
+
+ document.querySelectorAll('[data-prod-tab]')
+ .forEach(b => b.classList.remove('active'))
+
+ btn.classList.add('active')
+ renderAbaProdutos()
+ }
+ })
+}
+
+function renderAbaProdutos() {
+ bindSubtabsProdutos()
+
+ const produtos = getProdutosFiltrados()
+ const ranking = agruparProdutos(produtos)
+
+ if (!ranking.length) return
+
+ if (produtoSubaba === 'categoria') renderProdutosPorCategoria(ranking)
+ if (produtoSubaba === 'tamanho') renderProdutosPorTamanho(ranking)
+ if (produtoSubaba === 'destaque') renderProdutosBase(ranking, 'Produtos Destaque')
+ if (produtoSubaba === 'crescimento') renderProdutosCrescimento()
+ if (produtoSubaba === 'cardapio') renderCardapioManual()
+}
+
+function esconderFiltrosCrescimento() {
+ const filtros = $('produtos-crescimento-filtros')
+ if (filtros) filtros.style.display = 'none'
+}
+
+function mostrarFiltrosCrescimento() {
+ const filtros = $('produtos-crescimento-filtros')
+ if (filtros) filtros.style.display = 'flex'
+}
+
+function renderProdutosPorCategoria(ranking) {
+ esconderFiltrosCrescimento()
+
+ const grupos = {}
+
+ ranking.forEach(p => {
+ const grupo = p.grupo || 'Sem grupo'
+
+ if (!grupos[grupo]) {
+ grupos[grupo] = {
+ produto: grupo,
+ grupo,
+ tamanho: '—',
+ quantidade: 0,
+ valor_total: 0
+ }
+ }
+
+ grupos[grupo].quantidade += Number(p.quantidade || 0)
+ grupos[grupo].valor_total += Number(p.valor_total || 0)
+ })
+
+ const dados = Object.values(grupos)
+ .sort((a, b) => b.valor_total - a.valor_total)
+
+ renderProdutosBase(dados, 'Por Categoria')
+}
+
+function renderProdutosPorTamanho(ranking) {
+ esconderFiltrosCrescimento()
+
+ const tamanhos = {}
+
+ ranking.forEach(p => {
+ const tamanho = p.tamanho || 'OUTRO'
+
+ if (!tamanhos[tamanho]) {
+ tamanhos[tamanho] = {
+ produto: tamanho,
+ grupo: 'Tamanho',
+ tamanho,
+ quantidade: 0,
+ valor_total: 0
+ }
+ }
+
+ tamanhos[tamanho].quantidade += Number(p.quantidade || 0)
+ tamanhos[tamanho].valor_total += Number(p.valor_total || 0)
+ })
+
+ const dados = Object.values(tamanhos)
+ .sort((a, b) => b.valor_total - a.valor_total)
+
+ renderProdutosBase(dados, 'Por Tamanho')
+}
+
+function renderProdutosBase(dados, titulo) {
+ esconderFiltrosCrescimento()
+
+ const top = dados[0]
+ const qtdTotal = dados.reduce((acc, p) => acc + Number(p.quantidade || 0), 0)
+
+ $('prod-top').textContent = top.produto
+ $('prod-top-fat').textContent = fmtBRL(top.valor_total)
+ $('prod-qtd').textContent = fmtNum(dados.length)
+ $('prod-qtd-vendida').textContent = fmtNum(qtdTotal)
+
+ $('prod-chart-ranking-title').textContent = titulo
+ $('prod-chart-tamanho-title').textContent = 'Composição'
+ $('prod-table-title').textContent = titulo
+
+ $('tbodyProdutos').innerHTML = dados.slice(0, 100).map(p => `
+ <tr>
+ <td>${p.produto}</td>
+ <td>${p.grupo || '—'}</td>
+ <td>${p.tamanho || '—'}</td>
+ <td>${fmtNum(p.quantidade)}</td>
+ <td>${fmtBRL(p.valor_total)}</td>
+ </tr>
+ `).join('')
+
+ renderChartProdutosRanking(dados)
+ renderChartProdutosTamanho(dados)
+}
+
+function renderChartProdutosRanking(dados) {
+ const ctx = $('chartProdutosRanking')
+ if (!ctx) return
+
+ destruir(chartProdutosRanking)
+
+ const top10 = dados.slice(0, 10)
+
+ chartProdutosRanking = new Chart(ctx, {
+ type: 'bar',
+ data: {
+ labels: top10.map(p => p.produto),
+ datasets: [
+ {
+ label: 'Faturamento',
+ data: top10.map(p => Number(p.valor_total || 0))
+ }
+ ]
+ },
+ options: {
+ responsive: true,
+ indexAxis: 'y'
+ }
+ })
+}
+
+function renderChartProdutosTamanho(dados) {
+ const ctx = $('chartProdutosTamanho')
+ if (!ctx) return
+
+ destruir(chartProdutosTamanho)
+
+ const mapa = {}
+
+ dados.forEach(p => {
+ const tamanho = p.tamanho || 'OUTRO'
+ mapa[tamanho] = (mapa[tamanho] || 0) + Number(p.valor_total || 0)
+ })
+
+ chartProdutosTamanho = new Chart(ctx, {
+ type: 'doughnut',
+ data: {
+ labels: Object.keys(mapa),
+ datasets: [{ data: Object.values(mapa) }]
+ },
+ options: { responsive: true }
+ })
+}
+
+function popularFiltrosCrescimento() {
+ const selectProduto = $('selectProdutoCrescimento')
+ const selectComparacao = $('selectProdutoComparacao')
+ const selectTamanho = $('selectTamanhoCrescimento')
+ const selectMetrica = $('selectMetricaCrescimento')
+
+ if (!selectProduto || !selectComparacao || !selectTamanho || !selectMetrica) return
+ if (selectProduto.dataset.loaded) return
+
+ const produtos = [...new Set(getProdutosFiltrados().map(p => p.produto))]
+ .filter(Boolean)
+ .sort()
+
+ const opcoesProdutos = produtos
+ .map(p => `<option value="${p}">${p}</option>`)
+ .join('')
+
+ selectProduto.innerHTML = `
+ <option value="todos">Todos os Produtos</option>
+ ${opcoesProdutos}
+ `
+
+ selectComparacao.innerHTML = `
+ <option value="">Comparar com...</option>
+ ${opcoesProdutos}
+ `
+
+ selectProduto.onchange = renderProdutosCrescimento
+ selectComparacao.onchange = renderProdutosCrescimento
+ selectTamanho.onchange = renderProdutosCrescimento
+ selectMetrica.onchange = renderProdutosCrescimento
+
+ selectProduto.dataset.loaded = '1'
+}
+
+function renderProdutosCrescimento() {
+ mostrarFiltrosCrescimento()
+ popularFiltrosCrescimento()
+
+ const produtoSelecionado = $('selectProdutoCrescimento')?.value || 'todos'
+ const produtoComparacao = $('selectProdutoComparacao')?.value || ''
+ const tamanhoSelecionado = $('selectTamanhoCrescimento')?.value || 'todos'
+ const metrica = $('selectMetricaCrescimento')?.value || 'quantidade'
+
+ let produtosBase = getProdutosFiltrados()
+
+ if (tamanhoSelecionado !== 'todos') {
+ produtosBase = produtosBase.filter(p => (p.tamanho || 'OUTRO') === tamanhoSelecionado)
+ }
+
+ const periodos = [...new Set(produtosBase.map(p => p.periodo))]
+ .filter(Boolean)
+ .sort((a, b) => periodoParaOrdem(a) - periodoParaOrdem(b))
+
+ function serieParaProduto(nomeProduto) {
+ let lista = produtosBase
+
+ if (nomeProduto !== 'todos') {
+ lista = lista.filter(p => p.produto === nomeProduto)
+ }
+
+ const mapa = {}
+
+ lista.forEach(p => {
+ mapa[p.periodo] = (mapa[p.periodo] || 0) + Number(p[metrica] || 0)
+ })
+
+ return {
+ lista,
+ mapa,
+ valores: periodos.map(periodo => mapa[periodo] || 0)
+ }
+ }
+
+ const principal = serieParaProduto(produtoSelecionado)
+ const comparacao = produtoComparacao ? serieParaProduto(produtoComparacao) : null
+
+ const produtosResumo = principal.lista
+ const faturamento = produtosResumo.reduce((acc, p) => acc + Number(p.valor_total || 0), 0)
+ const quantidade = produtosResumo.reduce((acc, p) => acc + Number(p.quantidade || 0), 0)
+ const qtdProdutos = new Set(produtosResumo.map(p => p.produto)).size
+
+ $('prod-top').textContent = produtoSelecionado === 'todos' ? 'Produtos' : produtoSelecionado
+ $('prod-top-fat').textContent = fmtBRL(faturamento)
+ $('prod-qtd').textContent = fmtNum(qtdProdutos)
+ $('prod-qtd-vendida').textContent = fmtNum(quantidade)
+
+ $('prod-chart-ranking-title').textContent =
+ produtoComparacao ? 'Comparação de crescimento' : 'Crescimento mensal'
+
+ $('prod-chart-tamanho-title').textContent = 'Composição do filtro'
+ $('prod-table-title').textContent = 'Crescimento por período'
+
+ $('tbodyProdutos').innerHTML = periodos.map(periodo => {
+ const valorPrincipal = principal.mapa[periodo] || 0
+ const valorComparacao = comparacao ? (comparacao.mapa[periodo] || 0) : null
+
+ return `
+ <tr>
+ <td>${produtoSelecionado === 'todos' ? 'Todos' : produtoSelecionado}${produtoComparacao ? ` vs ${produtoComparacao}` : ''}</td>
+ <td>${periodo}</td>
+ <td>${tamanhoSelecionado}</td>
+ <td>${metrica === 'quantidade' ? fmtNum(valorPrincipal) : (valorComparacao !== null ? fmtNum(valorComparacao) : '—')}</td>
+ <td>${metrica === 'valor_total' ? fmtBRL(valorPrincipal) : (valorComparacao !== null ? fmtBRL(valorComparacao) : '—')}</td>
+ </tr>
+ `
+ }).join('')
+
+ destruir(chartProdutosRanking)
+
+ const datasets = [
+ {
+ label: produtoSelecionado === 'todos' ? 'Todos os Produtos' : produtoSelecionado,
+ data: principal.valores
+ }
+ ]
+
+ if (comparacao) {
+ datasets.push({
+ label: produtoComparacao,
+ data: comparacao.valores
+ })
+ }
+
+ chartProdutosRanking = new Chart($('chartProdutosRanking'), {
+ type: 'line',
+ data: { labels: periodos, datasets },
+ options: { responsive: true }
+ })
+
+ renderChartProdutosTamanho(
+ produtosResumo.map(p => ({
+ tamanho: p.tamanho || 'OUTRO',
+ valor_total: Number(p.valor_total || 0)
+ }))
+ )
+}
+
+function renderCardapioManual() {
+ esconderFiltrosCrescimento()
+
+ $('prod-top').textContent = 'Cardápio'
+ $('prod-top-fat').textContent = 'Manual'
+ $('prod-qtd').textContent = '—'
+ $('prod-qtd-vendida').textContent = '—'
+
+ $('prod-chart-ranking-title').textContent = 'Cardápio'
+ $('prod-chart-tamanho-title').textContent = 'Preços'
+ $('prod-table-title').textContent = 'Cardápio Manual'
+
+ $('tbodyProdutos').innerHTML = `
+ <tr>
+ <td colspan="5" style="text-align:left">
+ Área reservada para importar manualmente sabores e preços do cardápio físico.
+ </td>
+ </tr>
+ `
+
+ destruir(chartProdutosRanking)
+ destruir(chartProdutosTamanho)
+}
+
+// ===============================
 // COMPARAR PERÍODOS
-// ============================================================
-function cmpValidate(){
-  const aD=document.getElementById('cmp-a-de').value,aA=document.getElementById('cmp-a-ate').value;
-  const bD=document.getElementById('cmp-b-de').value,bA=document.getElementById('cmp-b-ate').value;
-  const ok=aD&&aA&&bD&&bA&&aD<=aA&&bD<=bA;
-  const btn=document.getElementById('cmp-btn');btn.style.opacity=ok?'1':'0.4';btn.style.pointerEvents=ok?'auto':'none';
-  if(aD&&aA){const n=DATA.diario.filter(d=>d.data>=aD&&d.data<=aA).length;document.getElementById('cmp-a-info').textContent=n?`${n} dias encontrados`:'';}
-  if(bD&&bA){const n=DATA.diario.filter(d=>d.data>=bD&&d.data<=bA).length;document.getElementById('cmp-b-info').textContent=n?`${n} dias encontrados`:'';}
+// ===============================
+
+function configurarDatasComparacao() {
+ const inputAInicio = $('compararAInicio')
+ const inputAFim = $('compararAFim')
+ const inputBInicio = $('compararBInicio')
+ const inputBFim = $('compararBFim')
+
+ if (!inputAInicio || inputAInicio.dataset.loaded) return
+
+ const datas = (DATA.vendas_diarias || [])
+ .map(v => v.data)
+ .filter(Boolean)
+ .sort()
+
+ if (datas.length) {
+ const primeira = datas[0]
+ const ultima = datas[datas.length - 1]
+
+ inputAInicio.value = primeira
+ inputAFim.value = primeira
+ inputBInicio.value = ultima
+ inputBFim.value = ultima
+ }
+
+ ;[inputAInicio, inputAFim, inputBInicio, inputBFim].forEach(input => {
+ input.onchange = renderCompararPeriodos
+ })
+
+ inputAInicio.dataset.loaded = '1'
 }
 
-function cmpGetData(de,ate){
-  const rows=DATA.diario.filter(d=>d.data>=de&&d.data<=ate);
-  return{fat:rows.reduce((s,d)=>s+(Number(d.fat_real)||0),0),pess:rows.reduce((s,d)=>s+(Number(d.pessoas)||0),0),tk:rows.length?rows.reduce((s,d)=>s+(Number(d.ticket)||0),0)/rows.length:0,cnt:rows.length,dias:rows};
+function getResumoPorIntervalo(inicio, fim) {
+ const vendas = (DATA.vendas_diarias || [])
+ .filter(v => v.data >= inicio && v.data <= fim)
+
+ const faturamento = vendas.reduce((acc, v) => acc + Number(v.fat_real || 0), 0)
+ const pessoas = vendas.reduce((acc, v) => acc + Number(v.pessoas || 0), 0)
+ const dias = vendas.length
+
+ return {
+ faturamento,
+ pessoas,
+ dias,
+ ticket: pessoas ? faturamento / pessoas : 0
+ }
 }
 
-function cmpRenderKpis(id,d,color){
-  document.getElementById(id).innerHTML=`
-    <div class="kpi ${color==='red'?'red':'green'}"><div class="kpi-l">Fat. Real</div><div class="kpi-v ${color==='red'?'red':'green'}">${fmtBRL(d.fat)}</div><div class="kpi-s">${d.cnt} dias</div></div>
-    <div class="kpi"><div class="kpi-l">Pessoas</div><div class="kpi-v">${fmtNum(d.pess)}</div></div>
-    <div class="kpi teal"><div class="kpi-l">Ticket Médio</div><div class="kpi-v">${fmtBRL(d.tk)}</div></div>`;
+function renderCompararPeriodos() {
+ if (!$('compararAInicio')) return
+
+ configurarDatasComparacao()
+
+ const aInicio = $('compararAInicio').value
+ const aFim = $('compararAFim').value
+ const bInicio = $('compararBInicio').value
+ const bFim = $('compararBFim').value
+
+ if (!aInicio || !aFim || !bInicio || !bFim) return
+
+ const resumoA = getResumoPorIntervalo(aInicio, aFim)
+ const resumoB = getResumoPorIntervalo(bInicio, bFim)
+
+ const diffFat = resumoB.faturamento - resumoA.faturamento
+ const diffPessoas = resumoB.pessoas - resumoA.pessoas
+ const diffTicket = resumoB.ticket - resumoA.ticket
+ const diffDias = resumoB.dias - resumoA.dias
+
+ const fatDiaA = resumoA.dias ? resumoA.faturamento / resumoA.dias : 0
+ const fatDiaB = resumoB.dias ? resumoB.faturamento / resumoB.dias : 0
+ const pessoasDiaA = resumoA.dias ? resumoA.pessoas / resumoA.dias : 0
+ const pessoasDiaB = resumoB.dias ? resumoB.pessoas / resumoB.dias : 0
+
+ const crescimentoPct = resumoA.faturamento
+ ? ((resumoB.faturamento - resumoA.faturamento) / resumoA.faturamento) * 100
+ : 0
+
+ $('comp-fat-diff').textContent = fmtBRL(diffFat)
+ $('comp-pessoas-diff').textContent = fmtNum(diffPessoas)
+ $('comp-ticket-diff').textContent = fmtBRL(diffTicket)
+ $('comp-dias-diff').textContent = fmtNum(diffDias)
+
+ if ($('comp-fat-dia')) $('comp-fat-dia').textContent = fmtBRL(fatDiaB)
+ if ($('comp-pessoas-dia')) $('comp-pessoas-dia').textContent = fmtNum(pessoasDiaB)
+ if ($('comp-ticket-dia')) $('comp-ticket-dia').textContent = fmtBRL(resumoB.ticket)
+ if ($('comp-crescimento-pct')) $('comp-crescimento-pct').textContent = `${crescimentoPct.toFixed(1)}%`
+
+ $('tbodyComparar').innerHTML = `
+ <tr>
+ <td>Faturamento Total</td>
+ <td>${fmtBRL(resumoA.faturamento)}</td>
+ <td>${fmtBRL(resumoB.faturamento)}</td>
+ <td>${fmtBRL(diffFat)}</td>
+ </tr>
+
+ <tr>
+ <td>Faturamento/Dia</td>
+ <td>${fmtBRL(fatDiaA)}</td>
+ <td>${fmtBRL(fatDiaB)}</td>
+ <td>${fmtBRL(fatDiaB - fatDiaA)}</td>
+ </tr>
+
+ <tr>
+ <td>Pessoas</td>
+ <td>${fmtNum(resumoA.pessoas)}</td>
+ <td>${fmtNum(resumoB.pessoas)}</td>
+ <td>${fmtNum(diffPessoas)}</td>
+ </tr>
+
+ <tr>
+ <td>Pessoas/Dia</td>
+ <td>${fmtNum(pessoasDiaA)}</td>
+ <td>${fmtNum(pessoasDiaB)}</td>
+ <td>${fmtNum(pessoasDiaB - pessoasDiaA)}</td>
+ </tr>
+
+ <tr>
+ <td>Ticket Médio</td>
+ <td>${fmtBRL(resumoA.ticket)}</td>
+ <td>${fmtBRL(resumoB.ticket)}</td>
+ <td>${fmtBRL(diffTicket)}</td>
+ </tr>
+
+ <tr>
+ <td>Crescimento %</td>
+ <td>—</td>
+ <td>${crescimentoPct.toFixed(1)}%</td>
+ <td>${crescimentoPct.toFixed(1)}%</td>
+ </tr>
+
+ <tr>
+ <td>Dias</td>
+ <td>${fmtNum(resumoA.dias)}</td>
+ <td>${fmtNum(resumoB.dias)}</td>
+ <td>${fmtNum(diffDias)}</td>
+ </tr>
+ `
+
+ renderInsightsComparacao(
+ resumoA,
+ resumoB,
+ crescimentoPct,
+ fatDiaA,
+ fatDiaB,
+ pessoasDiaA,
+ pessoasDiaB
+ )
+
+ renderChartCompararFatPorData(resumoA, resumoB)
+ renderChartCompararPessoasPorData(resumoA, resumoB)
 }
 
-function cmpRenderTabela(id,dias){
-  let html=`<thead><tr><th style="text-align:left">Data</th><th>Dia</th><th>Fat. Real</th><th>Pessoas</th><th>Ticket</th></tr></thead><tbody>`;
-  dias.slice().sort((a,b)=>a.data.localeCompare(b.data)).forEach(d=>{const dow=getDow(d.data);const dc=DOW_CLASS[dow]||'';html+=`<tr><td>${d.data}</td><td><span class="dow-badge ${dc}">${dow}</span></td><td>${fmtBRL(d.fat_real)}</td><td>${fmtNum(d.pessoas)}</td><td>${fmtBRL(d.ticket)}</td></tr>`;});
-  html+='</tbody>';document.getElementById(id).innerHTML=html;
+function renderChartCompararFatPorData(resumoA, resumoB) {
+ const ctx = $('chartCompararFat')
+ if (!ctx) return
+
+ destruir(chartCompararFat)
+
+ chartCompararFat = new Chart(ctx, {
+ type: 'bar',
+ data: {
+ labels: ['Período A', 'Período B'],
+ datasets: [
+ {
+ label: 'Faturamento',
+ data: [resumoA.faturamento, resumoB.faturamento]
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
 }
 
-function renderComparar(){
-  const aD=document.getElementById('cmp-a-de').value,aA=document.getElementById('cmp-a-ate').value;
-  const bD=document.getElementById('cmp-b-de').value,bA=document.getElementById('cmp-b-ate').value;
-  const dA=cmpGetData(aD,aA),dB=cmpGetData(bD,bA);
-  document.getElementById('cmp-a-header').textContent=`${aD} → ${aA}`;
-  document.getElementById('cmp-b-header').textContent=`${bD} → ${bA}`;
-  cmpRenderKpis('cmp-a-kpis',dA,'red');cmpRenderKpis('cmp-b-kpis',dB,'green');
-  cmpRenderTabela('cmp-a-tbl',dA.dias);cmpRenderTabela('cmp-b-tbl',dB.dias);
-  const metrics=[{label:'Faturamento',a:dA.fat,b:dB.fat,fmt:fmtBRL},{label:'Pessoas',a:dA.pess,b:dB.pess,fmt:fmtNum},{label:'Ticket Médio',a:dA.tk,b:dB.tk,fmt:fmtBRL},{label:'Dias',a:dA.cnt,b:dB.cnt,fmt:fmtNum}];
-  document.getElementById('cmp-delta-row').innerHTML=metrics.map(m=>{const delta=m.a>0?(m.b-m.a)/m.a*100:0;const isUp=delta>0.05,isDn=delta<-0.05;const arrow=isUp?'↑':isDn?'↓':'→';const color=isUp?'#16A34A':isDn?'#DC2626':'var(--ink3)';return`<div class="delta-card" style="border-top-color:${color};text-align:center"><div style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">${m.label}</div><div style="font-family:'Bebas Neue',sans-serif;font-size:26px;color:${color}">${arrow} ${Math.abs(delta).toFixed(1)}%</div><div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:1px solid var(--b1)"><span style="font-size:10px;color:var(--red)">A: ${m.fmt(m.a)}</span><span style="font-size:10px;color:var(--green)">B: ${m.fmt(m.b)}</span></div></div>`;}).join('');
-  document.getElementById('cmp-result').style.display='block';
-  document.getElementById('cmp-result').scrollIntoView({behavior:'smooth',block:'start'});
+function renderChartCompararPessoasPorData(resumoA, resumoB) {
+ const ctx = $('chartCompararPessoas')
+ if (!ctx) return
+
+ destruir(chartCompararPessoas)
+
+ chartCompararPessoas = new Chart(ctx, {
+ type: 'bar',
+ data: {
+ labels: ['Período A', 'Período B'],
+ datasets: [
+ {
+ label: 'Pessoas',
+ data: [resumoA.pessoas, resumoB.pessoas]
+ }
+ ]
+ },
+ options: { responsive: true }
+ })
 }
 
-// ============================================================
-// LOAD ALL
-// ============================================================
-async function loadAll(){
-  document.getElementById('hdrPeriodo').textContent='Atualizando...';
-  const[diario,modo_venda,horario,atendente,grupos,produtos,comandas,notas,cardapio]=await Promise.all([
-    fetchAll('lp_diario'),fetchAll('lp_modo_venda'),fetchAll('lp_horario'),
-    fetchAll('lp_atendente'),fetchAll('lp_grupos_parsed'),fetchAll('lp_produtos_parsed'),
-    fetchAll('lp_comandas'),fetchAll('lp_notas').catch(()=>[]),
-    fetchAll('lp_cardapio').catch(()=>[]),
-  ]);
-  DATA={diario,modo_venda,horario,atendente,grupos,produtos,comandas,notas:Array.isArray(notas)?notas:[],cardapio:Array.isArray(cardapio)?cardapio:[]};
+// ===============================
+// INSIGHTS
+// ===============================
 
-  // Data de referência — último período dos dados
-  const allMV=sortPeriodosMV([...new Set(DATA.modo_venda.map(d=>d.periodo).filter(Boolean))]);
-  const lastRef=allMV.length?allMV[allMV.length-1]:'—';
-  document.getElementById('hdrRef').textContent=`Ref: ${mvToLabel(lastRef)}`;
-  document.getElementById('hdrPeriodo').textContent=`${DATA.diario.length} dias · ${allMV.length} meses · Colibri Cloud`;
+function renderInsights() {
+ if (!$('insights-crescimento')) return
 
-  populatePeriodsDiario('sel-dia');
-  populatePeriodsMV('sel-canais',DATA.modo_venda.map(d=>d.periodo));
-  populatePeriodsMV('sel-horario',DATA.horario.map(d=>d.periodo));
-  populatePeriodsMV('sel-garcons',DATA.atendente.map(d=>d.periodo));
-  populatePeriodsMV('sel-cardapio',DATA.grupos.map(d=>d.periodo));
-  populatePeriodsMV('sel-comandas',DATA.comandas.map(d=>d.periodo));
-  populateProdGrupos();
-
-  renderTodasNotas();
-  mRenderVisao();renderDia();renderCanais();renderHorario();renderGarcons();renderCardapio();renderComandas();
+ renderInsightsCrescimento()
+ renderInsightsAlertas()
+ renderInsightsProdutos()
+ renderInsightsOperacao()
 }
 
-loadAll();
+function renderInsightsCrescimento() {
+ const box = $('insights-crescimento')
+ const resumo = DATA.resumo_mensal || []
 
-const METAS_DAILY=[{"data": "2025-01-01", "mes": "2025-01", "dia_semana": "Qua", "fat_total": 38042.47, "serv_tx": 3155.13, "fat_real": 38042.47, "pessoas": 408, "ticket_medio": 100.97, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 41197.6, "meta_salao": 41197.6, "meta_delivery": 0.0}, {"data": "2025-01-02", "mes": "2025-01", "dia_semana": "Qui", "fat_total": 16543.04, "serv_tx": 1273.85, "fat_real": 16543.04, "pessoas": 180, "ticket_medio": 98.98, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 17816.89, "meta_salao": 17816.89, "meta_delivery": 0.0}, {"data": "2025-01-03", "mes": "2025-01", "dia_semana": "Sex", "fat_total": 21856.52, "serv_tx": 1996.99, "fat_real": 21856.52, "pessoas": 243, "ticket_medio": 98.16, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 23853.51, "meta_salao": 23853.51, "meta_delivery": 0.0}, {"data": "2025-01-04", "mes": "2025-01", "dia_semana": "Sáb", "fat_total": 30565.22, "serv_tx": 2322.21, "fat_real": 30565.22, "pessoas": 328, "ticket_medio": 100.27, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 32887.43, "meta_salao": 32887.43, "meta_delivery": 0.0}, {"data": "2025-01-05", "mes": "2025-01", "dia_semana": "Dom", "fat_total": 45523.64, "serv_tx": 4002.99, "fat_real": 45523.64, "pessoas": 442, "ticket_medio": 112.05, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 49526.63, "meta_salao": 49526.63, "meta_delivery": 0.0}, {"data": "2025-01-06", "mes": "2025-01", "dia_semana": "Seg", "fat_total": 15773.9, "serv_tx": 1403.83, "fat_real": 15773.9, "pessoas": 183, "ticket_medio": 93.87, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 17177.73, "meta_salao": 17177.73, "meta_delivery": 0.0}, {"data": "2025-01-07", "mes": "2025-01", "dia_semana": "Ter", "fat_total": 13412.12, "serv_tx": 1070.89, "fat_real": 13412.12, "pessoas": 138, "ticket_medio": 104.95, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 14483.01, "meta_salao": 14483.01, "meta_delivery": 0.0}, {"data": "2025-01-08", "mes": "2025-01", "dia_semana": "Qua", "fat_total": 15152.89, "serv_tx": 1025.06, "fat_real": 15152.89, "pessoas": 167, "ticket_medio": 96.87, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 16177.95, "meta_salao": 16177.95, "meta_delivery": 0.0}, {"data": "2025-01-09", "mes": "2025-01", "dia_semana": "Qui", "fat_total": 13250.48, "serv_tx": 1127.56, "fat_real": 13250.48, "pessoas": 168, "ticket_medio": 85.58, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 14378.04, "meta_salao": 14378.04, "meta_delivery": 0.0}, {"data": "2025-01-10", "mes": "2025-01", "dia_semana": "Sex", "fat_total": 17489.82, "serv_tx": 1596.45, "fat_real": 17489.82, "pessoas": 192, "ticket_medio": 99.41, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 19086.27, "meta_salao": 19086.27, "meta_delivery": 0.0}, {"data": "2025-01-11", "mes": "2025-01", "dia_semana": "Sáb", "fat_total": 33219.52, "serv_tx": 2953.29, "fat_real": 33219.52, "pessoas": 342, "ticket_medio": 105.77, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 36172.81, "meta_salao": 36172.81, "meta_delivery": 0.0}, {"data": "2025-01-12", "mes": "2025-01", "dia_semana": "Dom", "fat_total": 39667.06, "serv_tx": 3256.81, "fat_real": 39667.06, "pessoas": 394, "ticket_medio": 108.94, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 42923.87, "meta_salao": 42923.87, "meta_delivery": 0.0}, {"data": "2025-01-13", "mes": "2025-01", "dia_semana": "Seg", "fat_total": 9957.67, "serv_tx": 873.06, "fat_real": 9957.67, "pessoas": 102, "ticket_medio": 106.18, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10830.73, "meta_salao": 10830.73, "meta_delivery": 0.0}, {"data": "2025-01-14", "mes": "2025-01", "dia_semana": "Ter", "fat_total": 9126.63, "serv_tx": 881.22, "fat_real": 9126.63, "pessoas": 107, "ticket_medio": 93.53, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10007.85, "meta_salao": 10007.85, "meta_delivery": 0.0}, {"data": "2025-01-15", "mes": "2025-01", "dia_semana": "Qua", "fat_total": 9928.05, "serv_tx": 823.96, "fat_real": 9928.05, "pessoas": 106, "ticket_medio": 101.43, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10752.01, "meta_salao": 10752.01, "meta_delivery": 0.0}, {"data": "2025-01-16", "mes": "2025-01", "dia_semana": "Qui", "fat_total": 7912.75, "serv_tx": 763.26, "fat_real": 7912.75, "pessoas": 83, "ticket_medio": 104.53, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8676.01, "meta_salao": 8676.01, "meta_delivery": 0.0}, {"data": "2025-01-17", "mes": "2025-01", "dia_semana": "Sex", "fat_total": 19116.53, "serv_tx": 1755.29, "fat_real": 19116.53, "pessoas": 201, "ticket_medio": 103.84, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 20871.82, "meta_salao": 20871.82, "meta_delivery": 0.0}, {"data": "2025-01-18", "mes": "2025-01", "dia_semana": "Sáb", "fat_total": 30788.6, "serv_tx": 2809.24, "fat_real": 30788.6, "pessoas": 333, "ticket_medio": 100.89, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 33597.84, "meta_salao": 33597.84, "meta_delivery": 0.0}, {"data": "2025-01-19", "mes": "2025-01", "dia_semana": "Dom", "fat_total": 43647.54, "serv_tx": 3816.6, "fat_real": 43647.54, "pessoas": 472, "ticket_medio": 100.56, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 47464.14, "meta_salao": 47464.14, "meta_delivery": 0.0}, {"data": "2025-01-20", "mes": "2025-01", "dia_semana": "Seg", "fat_total": 10382.24, "serv_tx": 941.6, "fat_real": 10382.24, "pessoas": 132, "ticket_medio": 85.79, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11323.84, "meta_salao": 11323.84, "meta_delivery": 0.0}, {"data": "2025-01-21", "mes": "2025-01", "dia_semana": "Ter", "fat_total": 8675.36, "serv_tx": 798.04, "fat_real": 8675.36, "pessoas": 94, "ticket_medio": 100.78, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9473.4, "meta_salao": 9473.4, "meta_delivery": 0.0}, {"data": "2025-01-22", "mes": "2025-01", "dia_semana": "Qua", "fat_total": 9640.42, "serv_tx": 735.93, "fat_real": 9640.42, "pessoas": 97, "ticket_medio": 106.97, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10376.35, "meta_salao": 10376.35, "meta_delivery": 0.0}, {"data": "2025-01-23", "mes": "2025-01", "dia_semana": "Qui", "fat_total": 9334.38, "serv_tx": 763.47, "fat_real": 9334.38, "pessoas": 95, "ticket_medio": 106.29, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10097.85, "meta_salao": 10097.85, "meta_delivery": 0.0}, {"data": "2025-01-24", "mes": "2025-01", "dia_semana": "Sex", "fat_total": 20842.07, "serv_tx": 1735.48, "fat_real": 20842.07, "pessoas": 198, "ticket_medio": 114.03, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 22577.55, "meta_salao": 22577.55, "meta_delivery": 0.0}, {"data": "2025-01-25", "mes": "2025-01", "dia_semana": "Sáb", "fat_total": 31362.03, "serv_tx": 2852.56, "fat_real": 31362.03, "pessoas": 370, "ticket_medio": 92.47, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 34214.59, "meta_salao": 34214.59, "meta_delivery": 0.0}, {"data": "2025-01-26", "mes": "2025-01", "dia_semana": "Dom", "fat_total": 39459.91, "serv_tx": 3279.7, "fat_real": 39459.91, "pessoas": 385, "ticket_medio": 111.01, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 42739.61, "meta_salao": 42739.61, "meta_delivery": 0.0}, {"data": "2025-01-27", "mes": "2025-01", "dia_semana": "Seg", "fat_total": 6871.36, "serv_tx": 553.5, "fat_real": 6871.36, "pessoas": 69, "ticket_medio": 107.61, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 7424.86, "meta_salao": 7424.86, "meta_delivery": 0.0}, {"data": "2025-01-28", "mes": "2025-01", "dia_semana": "Ter", "fat_total": 11702.46, "serv_tx": 802.87, "fat_real": 11702.46, "pessoas": 96, "ticket_medio": 130.26, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12505.33, "meta_salao": 12505.33, "meta_delivery": 0.0}, {"data": "2025-01-29", "mes": "2025-01", "dia_semana": "Qua", "fat_total": 10414.5, "serv_tx": 741.49, "fat_real": 10414.5, "pessoas": 106, "ticket_medio": 105.25, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11155.99, "meta_salao": 11155.99, "meta_delivery": 0.0}, {"data": "2025-01-30", "mes": "2025-01", "dia_semana": "Qui", "fat_total": 13482.65, "serv_tx": 1263.88, "fat_real": 13482.65, "pessoas": 86, "ticket_medio": 171.47, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 14746.53, "meta_salao": 14746.53, "meta_delivery": 0.0}, {"data": "2025-01-31", "mes": "2025-01", "dia_semana": "Sex", "fat_total": 21560.11, "serv_tx": 1922.56, "fat_real": 21560.11, "pessoas": 199, "ticket_medio": 118.0, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 23482.67, "meta_salao": 23482.67, "meta_delivery": 0.0}, {"data": "2025-02-01", "mes": "2025-02", "dia_semana": "Sáb", "fat_total": 30238.78, "serv_tx": 2821.82, "fat_real": 30238.78, "pessoas": 337, "ticket_medio": 98.1, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 33060.6, "meta_salao": 33060.6, "meta_delivery": 0.0}, {"data": "2025-02-02", "mes": "2025-02", "dia_semana": "Dom", "fat_total": 32839.32, "serv_tx": 2829.77, "fat_real": 32839.32, "pessoas": 331, "ticket_medio": 107.76, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 35669.09, "meta_salao": 35669.09, "meta_delivery": 0.0}, {"data": "2025-02-03", "mes": "2025-02", "dia_semana": "Seg", "fat_total": 6709.49, "serv_tx": 624.11, "fat_real": 6709.49, "pessoas": 81, "ticket_medio": 90.54, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 7333.6, "meta_salao": 7333.6, "meta_delivery": 0.0}, {"data": "2025-02-04", "mes": "2025-02", "dia_semana": "Ter", "fat_total": 8305.73, "serv_tx": 742.84, "fat_real": 8305.73, "pessoas": 93, "ticket_medio": 97.3, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9048.57, "meta_salao": 9048.57, "meta_delivery": 0.0}, {"data": "2025-02-05", "mes": "2025-02", "dia_semana": "Qua", "fat_total": 8346.94, "serv_tx": 852.03, "fat_real": 8346.94, "pessoas": 76, "ticket_medio": 121.04, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9198.97, "meta_salao": 9198.97, "meta_delivery": 0.0}, {"data": "2025-02-06", "mes": "2025-02", "dia_semana": "Qui", "fat_total": 12576.39, "serv_tx": 1150.12, "fat_real": 12576.39, "pessoas": 137, "ticket_medio": 100.19, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13726.51, "meta_salao": 13726.51, "meta_delivery": 0.0}, {"data": "2025-02-07", "mes": "2025-02", "dia_semana": "Sex", "fat_total": 23473.49, "serv_tx": 2127.77, "fat_real": 23473.49, "pessoas": 249, "ticket_medio": 102.82, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 25601.26, "meta_salao": 25601.26, "meta_delivery": 0.0}, {"data": "2025-02-08", "mes": "2025-02", "dia_semana": "Sáb", "fat_total": 33126.6, "serv_tx": 2839.75, "fat_real": 33126.6, "pessoas": 344, "ticket_medio": 104.55, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 35966.35, "meta_salao": 35966.35, "meta_delivery": 0.0}, {"data": "2025-02-09", "mes": "2025-02", "dia_semana": "Dom", "fat_total": 36122.22, "serv_tx": 3098.99, "fat_real": 36122.22, "pessoas": 343, "ticket_medio": 114.35, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 39221.21, "meta_salao": 39221.21, "meta_delivery": 0.0}, {"data": "2025-02-10", "mes": "2025-02", "dia_semana": "Seg", "fat_total": 9433.65, "serv_tx": 733.11, "fat_real": 9433.65, "pessoas": 82, "ticket_medio": 123.98, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10166.76, "meta_salao": 10166.76, "meta_delivery": 0.0}, {"data": "2025-02-11", "mes": "2025-02", "dia_semana": "Ter", "fat_total": 7038.09, "serv_tx": 557.16, "fat_real": 7038.09, "pessoas": 69, "ticket_medio": 110.08, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 7595.25, "meta_salao": 7595.25, "meta_delivery": 0.0}, {"data": "2025-02-12", "mes": "2025-02", "dia_semana": "Qua", "fat_total": 9429.88, "serv_tx": 896.8, "fat_real": 9429.88, "pessoas": 107, "ticket_medio": 96.51, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10326.68, "meta_salao": 10326.68, "meta_delivery": 0.0}, {"data": "2025-02-13", "mes": "2025-02", "dia_semana": "Qui", "fat_total": 7230.47, "serv_tx": 647.18, "fat_real": 7230.47, "pessoas": 67, "ticket_medio": 117.58, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 7877.65, "meta_salao": 7877.65, "meta_delivery": 0.0}, {"data": "2025-02-14", "mes": "2025-02", "dia_semana": "Sex", "fat_total": 21443.24, "serv_tx": 1958.26, "fat_real": 21443.24, "pessoas": 243, "ticket_medio": 96.3, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 23401.5, "meta_salao": 23401.5, "meta_delivery": 0.0}, {"data": "2025-02-15", "mes": "2025-02", "dia_semana": "Sáb", "fat_total": 26138.28, "serv_tx": 2364.2, "fat_real": 26138.28, "pessoas": 266, "ticket_medio": 107.15, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 28502.48, "meta_salao": 28502.48, "meta_delivery": 0.0}, {"data": "2025-02-16", "mes": "2025-02", "dia_semana": "Dom", "fat_total": 37101.5, "serv_tx": 3293.91, "fat_real": 37101.5, "pessoas": 376, "ticket_medio": 107.43, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 40395.41, "meta_salao": 40395.41, "meta_delivery": 0.0}, {"data": "2025-02-17", "mes": "2025-02", "dia_semana": "Seg", "fat_total": 8787.48, "serv_tx": 814.28, "fat_real": 8787.48, "pessoas": 88, "ticket_medio": 109.11, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9601.76, "meta_salao": 9601.76, "meta_delivery": 0.0}, {"data": "2025-02-18", "mes": "2025-02", "dia_semana": "Ter", "fat_total": 7034.39, "serv_tx": 577.48, "fat_real": 7034.39, "pessoas": 66, "ticket_medio": 115.33, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 7611.87, "meta_salao": 7611.87, "meta_delivery": 0.0}, {"data": "2025-02-19", "mes": "2025-02", "dia_semana": "Qua", "fat_total": 15154.58, "serv_tx": 1426.16, "fat_real": 15154.58, "pessoas": 164, "ticket_medio": 101.1, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 16580.74, "meta_salao": 16580.74, "meta_delivery": 0.0}, {"data": "2025-02-20", "mes": "2025-02", "dia_semana": "Qui", "fat_total": 14831.62, "serv_tx": 1151.21, "fat_real": 14831.62, "pessoas": 122, "ticket_medio": 131.01, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 15982.83, "meta_salao": 15982.83, "meta_delivery": 0.0}, {"data": "2025-02-21", "mes": "2025-02", "dia_semana": "Sex", "fat_total": 26455.78, "serv_tx": 2049.76, "fat_real": 26455.78, "pessoas": 238, "ticket_medio": 119.77, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 28505.54, "meta_salao": 28505.54, "meta_delivery": 0.0}, {"data": "2025-02-22", "mes": "2025-02", "dia_semana": "Sáb", "fat_total": 31170.64, "serv_tx": 2581.53, "fat_real": 31170.64, "pessoas": 313, "ticket_medio": 107.83, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 33752.17, "meta_salao": 33752.17, "meta_delivery": 0.0}, {"data": "2025-02-23", "mes": "2025-02", "dia_semana": "Dom", "fat_total": 34715.51, "serv_tx": 2993.88, "fat_real": 34715.51, "pessoas": 301, "ticket_medio": 125.28, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 37709.39, "meta_salao": 37709.39, "meta_delivery": 0.0}, {"data": "2025-02-24", "mes": "2025-02", "dia_semana": "Seg", "fat_total": 4938.22, "serv_tx": 392.24, "fat_real": 4938.22, "pessoas": 44, "ticket_medio": 121.15, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 5330.46, "meta_salao": 5330.46, "meta_delivery": 0.0}, {"data": "2025-02-25", "mes": "2025-02", "dia_semana": "Ter", "fat_total": 7923.3, "serv_tx": 753.26, "fat_real": 7923.3, "pessoas": 85, "ticket_medio": 102.08, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8676.56, "meta_salao": 8676.56, "meta_delivery": 0.0}, {"data": "2025-02-26", "mes": "2025-02", "dia_semana": "Qua", "fat_total": 7933.33, "serv_tx": 620.66, "fat_real": 7933.33, "pessoas": 65, "ticket_medio": 131.6, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8553.99, "meta_salao": 8553.99, "meta_delivery": 0.0}, {"data": "2025-02-27", "mes": "2025-02", "dia_semana": "Qui", "fat_total": 10812.77, "serv_tx": 642.4, "fat_real": 10812.77, "pessoas": 100, "ticket_medio": 114.55, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11455.17, "meta_salao": 11455.17, "meta_delivery": 0.0}, {"data": "2025-02-28", "mes": "2025-02", "dia_semana": "Sex", "fat_total": 20202.26, "serv_tx": 1720.85, "fat_real": 20202.26, "pessoas": 192, "ticket_medio": 114.18, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 21923.11, "meta_salao": 21923.11, "meta_delivery": 0.0}, {"data": "2025-03-01", "mes": "2025-03", "dia_semana": "Sáb", "fat_total": 28980.13, "serv_tx": 2484.74, "fat_real": 28980.13, "pessoas": 305, "ticket_medio": 103.16, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 31464.87, "meta_salao": 31464.87, "meta_delivery": 0.0}, {"data": "2025-03-02", "mes": "2025-03", "dia_semana": "Dom", "fat_total": 44874.76, "serv_tx": 4007.86, "fat_real": 44874.76, "pessoas": 445, "ticket_medio": 109.85, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 48882.62, "meta_salao": 48882.62, "meta_delivery": 0.0}, {"data": "2025-03-03", "mes": "2025-03", "dia_semana": "Seg", "fat_total": 19588.17, "serv_tx": 1599.09, "fat_real": 19588.17, "pessoas": 175, "ticket_medio": 121.07, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 21187.26, "meta_salao": 21187.26, "meta_delivery": 0.0}, {"data": "2025-03-04", "mes": "2025-03", "dia_semana": "Ter", "fat_total": 21553.97, "serv_tx": 2097.61, "fat_real": 21553.97, "pessoas": 225, "ticket_medio": 105.12, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 23651.58, "meta_salao": 23651.58, "meta_delivery": 0.0}, {"data": "2025-03-05", "mes": "2025-03", "dia_semana": "Qua", "fat_total": 15697.45, "serv_tx": 1130.85, "fat_real": 15697.45, "pessoas": 156, "ticket_medio": 107.87, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 16828.3, "meta_salao": 16828.3, "meta_delivery": 0.0}, {"data": "2025-03-06", "mes": "2025-03", "dia_semana": "Qui", "fat_total": 10099.75, "serv_tx": 730.49, "fat_real": 10099.75, "pessoas": 127, "ticket_medio": 85.28, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10830.24, "meta_salao": 10830.24, "meta_delivery": 0.0}, {"data": "2025-03-07", "mes": "2025-03", "dia_semana": "Sex", "fat_total": 20384.11, "serv_tx": 1348.04, "fat_real": 20384.11, "pessoas": 206, "ticket_medio": 105.5, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 21732.15, "meta_salao": 21732.15, "meta_delivery": 0.0}, {"data": "2025-03-08", "mes": "2025-03", "dia_semana": "Sáb", "fat_total": 36264.39, "serv_tx": 3066.15, "fat_real": 36264.39, "pessoas": 428, "ticket_medio": 91.89, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 39330.54, "meta_salao": 39330.54, "meta_delivery": 0.0}, {"data": "2025-03-09", "mes": "2025-03", "dia_semana": "Dom", "fat_total": 37442.21, "serv_tx": 2783.06, "fat_real": 37442.21, "pessoas": 384, "ticket_medio": 104.75, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 40225.27, "meta_salao": 40225.27, "meta_delivery": 0.0}, {"data": "2025-03-10", "mes": "2025-03", "dia_semana": "Seg", "fat_total": 6459.29, "serv_tx": 448.9, "fat_real": 6459.29, "pessoas": 74, "ticket_medio": 93.35, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 6908.19, "meta_salao": 6908.19, "meta_delivery": 0.0}, {"data": "2025-03-11", "mes": "2025-03", "dia_semana": "Ter", "fat_total": 8694.37, "serv_tx": 547.79, "fat_real": 8694.37, "pessoas": 78, "ticket_medio": 118.49, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9242.16, "meta_salao": 9242.16, "meta_delivery": 0.0}, {"data": "2025-03-12", "mes": "2025-03", "dia_semana": "Qua", "fat_total": 8321.54, "serv_tx": 539.77, "fat_real": 8321.54, "pessoas": 94, "ticket_medio": 94.27, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8861.31, "meta_salao": 8861.31, "meta_delivery": 0.0}, {"data": "2025-03-13", "mes": "2025-03", "dia_semana": "Qui", "fat_total": 10096.87, "serv_tx": 640.34, "fat_real": 10096.87, "pessoas": 134, "ticket_medio": 80.13, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10737.21, "meta_salao": 10737.21, "meta_delivery": 0.0}, {"data": "2025-03-14", "mes": "2025-03", "dia_semana": "Sex", "fat_total": 21988.68, "serv_tx": 1629.43, "fat_real": 21988.68, "pessoas": 216, "ticket_medio": 109.34, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 23618.11, "meta_salao": 23618.11, "meta_delivery": 0.0}, {"data": "2025-03-15", "mes": "2025-03", "dia_semana": "Sáb", "fat_total": 27986.87, "serv_tx": 1632.15, "fat_real": 27986.87, "pessoas": 285, "ticket_medio": 103.93, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 29619.02, "meta_salao": 29619.02, "meta_delivery": 0.0}, {"data": "2025-03-16", "mes": "2025-03", "dia_semana": "Dom", "fat_total": 32453.0, "serv_tx": 2268.47, "fat_real": 32453.0, "pessoas": 335, "ticket_medio": 103.65, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 34721.47, "meta_salao": 34721.47, "meta_delivery": 0.0}, {"data": "2025-03-18", "mes": "2025-03", "dia_semana": "Ter", "fat_total": 10621.32, "serv_tx": 768.81, "fat_real": 10621.32, "pessoas": 148, "ticket_medio": 76.96, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11390.13, "meta_salao": 11390.13, "meta_delivery": 0.0}, {"data": "2025-03-19", "mes": "2025-03", "dia_semana": "Qua", "fat_total": 10011.3, "serv_tx": 688.38, "fat_real": 10011.3, "pessoas": 97, "ticket_medio": 110.31, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10699.68, "meta_salao": 10699.68, "meta_delivery": 0.0}, {"data": "2025-03-20", "mes": "2025-03", "dia_semana": "Qui", "fat_total": 11492.07, "serv_tx": 753.95, "fat_real": 11492.07, "pessoas": 133, "ticket_medio": 92.08, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12246.02, "meta_salao": 12246.02, "meta_delivery": 0.0}, {"data": "2025-03-21", "mes": "2025-03", "dia_semana": "Sex", "fat_total": 24548.31, "serv_tx": 1744.8, "fat_real": 24548.31, "pessoas": 237, "ticket_medio": 110.94, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 26293.11, "meta_salao": 26293.11, "meta_delivery": 0.0}, {"data": "2025-03-22", "mes": "2025-03", "dia_semana": "Sáb", "fat_total": 35745.15, "serv_tx": 2464.98, "fat_real": 35745.15, "pessoas": 405, "ticket_medio": 94.35, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 38210.13, "meta_salao": 38210.13, "meta_delivery": 0.0}, {"data": "2025-03-23", "mes": "2025-03", "dia_semana": "Dom", "fat_total": 33151.5, "serv_tx": 2640.74, "fat_real": 33151.5, "pessoas": 330, "ticket_medio": 108.46, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 35792.24, "meta_salao": 35792.24, "meta_delivery": 0.0}, {"data": "2025-03-24", "mes": "2025-03", "dia_semana": "Seg", "fat_total": 6879.49, "serv_tx": 405.77, "fat_real": 6879.49, "pessoas": 78, "ticket_medio": 93.4, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 7285.26, "meta_salao": 7285.26, "meta_delivery": 0.0}, {"data": "2025-03-25", "mes": "2025-03", "dia_semana": "Ter", "fat_total": 12663.89, "serv_tx": 787.14, "fat_real": 12663.89, "pessoas": 134, "ticket_medio": 100.38, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13451.03, "meta_salao": 13451.03, "meta_delivery": 0.0}, {"data": "2025-03-26", "mes": "2025-03", "dia_semana": "Qua", "fat_total": 12099.8, "serv_tx": 859.4, "fat_real": 12099.8, "pessoas": 155, "ticket_medio": 83.61, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12959.2, "meta_salao": 12959.2, "meta_delivery": 0.0}, {"data": "2025-03-27", "mes": "2025-03", "dia_semana": "Qui", "fat_total": 10254.14, "serv_tx": 694.75, "fat_real": 10254.14, "pessoas": 116, "ticket_medio": 94.39, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10948.89, "meta_salao": 10948.89, "meta_delivery": 0.0}, {"data": "2025-03-28", "mes": "2025-03", "dia_semana": "Sex", "fat_total": 24486.24, "serv_tx": 1737.61, "fat_real": 24486.24, "pessoas": 247, "ticket_medio": 106.17, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 26223.85, "meta_salao": 26223.85, "meta_delivery": 0.0}, {"data": "2025-03-29", "mes": "2025-03", "dia_semana": "Sáb", "fat_total": 31243.5, "serv_tx": 2568.59, "fat_real": 31243.5, "pessoas": 317, "ticket_medio": 106.66, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 33812.09, "meta_salao": 33812.09, "meta_delivery": 0.0}, {"data": "2025-03-30", "mes": "2025-03", "dia_semana": "Dom", "fat_total": 41110.69, "serv_tx": 3368.67, "fat_real": 41110.69, "pessoas": 406, "ticket_medio": 109.56, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 44479.36, "meta_salao": 44479.36, "meta_delivery": 0.0}, {"data": "2025-03-31", "mes": "2025-03", "dia_semana": "Seg", "fat_total": 8343.28, "serv_tx": 369.71, "fat_real": 8343.28, "pessoas": 89, "ticket_medio": 97.9, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8712.99, "meta_salao": 8712.99, "meta_delivery": 0.0}, {"data": "2025-04-01", "mes": "2025-04", "dia_semana": "Ter", "fat_total": 10109.59, "serv_tx": 728.28, "fat_real": 10109.59, "pessoas": 106, "ticket_medio": 102.24, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10837.87, "meta_salao": 10837.87, "meta_delivery": 0.0}, {"data": "2025-04-02", "mes": "2025-04", "dia_semana": "Qua", "fat_total": 10944.64, "serv_tx": 647.75, "fat_real": 10944.64, "pessoas": 107, "ticket_medio": 108.34, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11592.39, "meta_salao": 11592.39, "meta_delivery": 0.0}, {"data": "2025-04-03", "mes": "2025-04", "dia_semana": "Qui", "fat_total": 9253.32, "serv_tx": 514.1, "fat_real": 9253.32, "pessoas": 80, "ticket_medio": 122.09, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9767.42, "meta_salao": 9767.42, "meta_delivery": 0.0}, {"data": "2025-04-04", "mes": "2025-04", "dia_semana": "Sex", "fat_total": 24203.05, "serv_tx": 1966.66, "fat_real": 24203.05, "pessoas": 246, "ticket_medio": 106.38, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 26169.71, "meta_salao": 26169.71, "meta_delivery": 0.0}, {"data": "2025-04-05", "mes": "2025-04", "dia_semana": "Sáb", "fat_total": 38112.8, "serv_tx": 3287.61, "fat_real": 38112.8, "pessoas": 397, "ticket_medio": 104.28, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 41400.41, "meta_salao": 41400.41, "meta_delivery": 0.0}, {"data": "2025-04-06", "mes": "2025-04", "dia_semana": "Dom", "fat_total": 42870.7, "serv_tx": 3772.09, "fat_real": 42870.7, "pessoas": 426, "ticket_medio": 109.49, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 46642.79, "meta_salao": 46642.79, "meta_delivery": 0.0}, {"data": "2025-04-07", "mes": "2025-04", "dia_semana": "Seg", "fat_total": 8074.99, "serv_tx": 574.96, "fat_real": 8074.99, "pessoas": 97, "ticket_medio": 89.17, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8649.95, "meta_salao": 8649.95, "meta_delivery": 0.0}, {"data": "2025-04-08", "mes": "2025-04", "dia_semana": "Ter", "fat_total": 6729.89, "serv_tx": 397.4, "fat_real": 6729.89, "pessoas": 74, "ticket_medio": 96.31, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 7127.29, "meta_salao": 7127.29, "meta_delivery": 0.0}, {"data": "2025-04-09", "mes": "2025-04", "dia_semana": "Qua", "fat_total": 9621.85, "serv_tx": 627.78, "fat_real": 9621.85, "pessoas": 116, "ticket_medio": 88.36, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10249.63, "meta_salao": 10249.63, "meta_delivery": 0.0}, {"data": "2025-04-10", "mes": "2025-04", "dia_semana": "Qui", "fat_total": 13402.3, "serv_tx": 1030.86, "fat_real": 13402.3, "pessoas": 153, "ticket_medio": 94.33, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 14433.16, "meta_salao": 14433.16, "meta_delivery": 0.0}, {"data": "2025-04-11", "mes": "2025-04", "dia_semana": "Sex", "fat_total": 27443.47, "serv_tx": 2168.19, "fat_real": 27443.47, "pessoas": 329, "ticket_medio": 90.01, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 29611.66, "meta_salao": 29611.66, "meta_delivery": 0.0}, {"data": "2025-04-12", "mes": "2025-04", "dia_semana": "Sáb", "fat_total": 32125.05, "serv_tx": 2876.38, "fat_real": 32125.05, "pessoas": 337, "ticket_medio": 103.86, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 35001.43, "meta_salao": 35001.43, "meta_delivery": 0.0}, {"data": "2025-04-13", "mes": "2025-04", "dia_semana": "Dom", "fat_total": 40804.79, "serv_tx": 3549.28, "fat_real": 40804.79, "pessoas": 436, "ticket_medio": 101.73, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 44354.07, "meta_salao": 44354.07, "meta_delivery": 0.0}, {"data": "2025-04-14", "mes": "2025-04", "dia_semana": "Seg", "fat_total": 9422.12, "serv_tx": 790.13, "fat_real": 9422.12, "pessoas": 83, "ticket_medio": 123.04, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10212.25, "meta_salao": 10212.25, "meta_delivery": 0.0}, {"data": "2025-04-15", "mes": "2025-04", "dia_semana": "Ter", "fat_total": 10663.27, "serv_tx": 913.0, "fat_real": 10663.27, "pessoas": 154, "ticket_medio": 75.17, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11576.27, "meta_salao": 11576.27, "meta_delivery": 0.0}, {"data": "2025-04-16", "mes": "2025-04", "dia_semana": "Qua", "fat_total": 15162.03, "serv_tx": 1438.34, "fat_real": 15162.03, "pessoas": 175, "ticket_medio": 94.86, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 16600.37, "meta_salao": 16600.37, "meta_delivery": 0.0}, {"data": "2025-04-17", "mes": "2025-04", "dia_semana": "Qui", "fat_total": 21166.56, "serv_tx": 1659.49, "fat_real": 21166.56, "pessoas": 230, "ticket_medio": 99.24, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 22826.05, "meta_salao": 22826.05, "meta_delivery": 0.0}, {"data": "2025-04-18", "mes": "2025-04", "dia_semana": "Sex", "fat_total": 25790.94, "serv_tx": 2007.68, "fat_real": 25790.94, "pessoas": 309, "ticket_medio": 89.96, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 27798.62, "meta_salao": 27798.62, "meta_delivery": 0.0}, {"data": "2025-04-19", "mes": "2025-04", "dia_semana": "Sáb", "fat_total": 29741.39, "serv_tx": 2603.19, "fat_real": 29741.39, "pessoas": 347, "ticket_medio": 93.21, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 32344.58, "meta_salao": 32344.58, "meta_delivery": 0.0}, {"data": "2025-04-20", "mes": "2025-04", "dia_semana": "Dom", "fat_total": 34587.09, "serv_tx": 2833.42, "fat_real": 34587.09, "pessoas": 384, "ticket_medio": 97.45, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 37420.51, "meta_salao": 37420.51, "meta_delivery": 0.0}, {"data": "2025-04-21", "mes": "2025-04", "dia_semana": "Seg", "fat_total": 19430.64, "serv_tx": 1750.98, "fat_real": 19430.64, "pessoas": 194, "ticket_medio": 109.18, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 21181.62, "meta_salao": 21181.62, "meta_delivery": 0.0}, {"data": "2025-04-22", "mes": "2025-04", "dia_semana": "Ter", "fat_total": 5665.56, "serv_tx": 470.77, "fat_real": 5665.56, "pessoas": 81, "ticket_medio": 75.76, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 6136.33, "meta_salao": 6136.33, "meta_delivery": 0.0}, {"data": "2025-04-23", "mes": "2025-04", "dia_semana": "Qua", "fat_total": 8970.85, "serv_tx": 756.13, "fat_real": 8970.85, "pessoas": 118, "ticket_medio": 82.43, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9726.98, "meta_salao": 9726.98, "meta_delivery": 0.0}, {"data": "2025-04-24", "mes": "2025-04", "dia_semana": "Qui", "fat_total": 9291.75, "serv_tx": 705.58, "fat_real": 9291.75, "pessoas": 128, "ticket_medio": 78.1, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9997.33, "meta_salao": 9997.33, "meta_delivery": 0.0}, {"data": "2025-04-25", "mes": "2025-04", "dia_semana": "Sex", "fat_total": 20766.32, "serv_tx": 1804.1, "fat_real": 20766.32, "pessoas": 234, "ticket_medio": 96.45, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 22570.42, "meta_salao": 22570.42, "meta_delivery": 0.0}, {"data": "2025-04-26", "mes": "2025-04", "dia_semana": "Sáb", "fat_total": 28912.4, "serv_tx": 2385.51, "fat_real": 28912.4, "pessoas": 370, "ticket_medio": 84.59, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 31297.91, "meta_salao": 31297.91, "meta_delivery": 0.0}, {"data": "2025-04-27", "mes": "2025-04", "dia_semana": "Dom", "fat_total": 34016.58, "serv_tx": 3173.67, "fat_real": 34016.58, "pessoas": 422, "ticket_medio": 88.13, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 37190.25, "meta_salao": 37190.25, "meta_delivery": 0.0}, {"data": "2025-04-28", "mes": "2025-04", "dia_semana": "Seg", "fat_total": 7846.07, "serv_tx": 547.85, "fat_real": 7846.07, "pessoas": 104, "ticket_medio": 80.71, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8393.92, "meta_salao": 8393.92, "meta_delivery": 0.0}, {"data": "2025-04-29", "mes": "2025-04", "dia_semana": "Ter", "fat_total": 9291.87, "serv_tx": 693.56, "fat_real": 9291.87, "pessoas": 123, "ticket_medio": 81.18, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9985.43, "meta_salao": 9985.43, "meta_delivery": 0.0}, {"data": "2025-04-30", "mes": "2025-04", "dia_semana": "Qua", "fat_total": 18877.04, "serv_tx": 1346.82, "fat_real": 18877.04, "pessoas": 188, "ticket_medio": 107.57, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 20223.86, "meta_salao": 20223.86, "meta_delivery": 0.0}, {"data": "2025-05-01", "mes": "2025-05", "dia_semana": "Qui", "fat_total": 26152.65, "serv_tx": 2359.86, "fat_real": 26152.65, "pessoas": 270, "ticket_medio": 105.6, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 28512.51, "meta_salao": 28512.51, "meta_delivery": 0.0}, {"data": "2025-05-02", "mes": "2025-05", "dia_semana": "Sex", "fat_total": 23415.15, "serv_tx": 1867.55, "fat_real": 23415.15, "pessoas": 237, "ticket_medio": 106.68, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 25282.7, "meta_salao": 25282.7, "meta_delivery": 0.0}, {"data": "2025-05-03", "mes": "2025-05", "dia_semana": "Sáb", "fat_total": 29197.59, "serv_tx": 2064.12, "fat_real": 29197.59, "pessoas": 302, "ticket_medio": 103.52, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 31261.71, "meta_salao": 31261.71, "meta_delivery": 0.0}, {"data": "2025-05-04", "mes": "2025-05", "dia_semana": "Dom", "fat_total": 40663.12, "serv_tx": 3530.9, "fat_real": 40663.12, "pessoas": 438, "ticket_medio": 100.9, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 44194.02, "meta_salao": 44194.02, "meta_delivery": 0.0}, {"data": "2025-05-05", "mes": "2025-05", "dia_semana": "Seg", "fat_total": 7937.63, "serv_tx": 580.26, "fat_real": 7937.63, "pessoas": 85, "ticket_medio": 100.21, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8517.89, "meta_salao": 8517.89, "meta_delivery": 0.0}, {"data": "2025-05-06", "mes": "2025-05", "dia_semana": "Ter", "fat_total": 275.0, "serv_tx": 42.0, "fat_real": 275.0, "pessoas": 2, "ticket_medio": 158.5, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 0.0, "meta_salao": 0.0, "meta_delivery": 0.0}, {"data": "2025-05-07", "mes": "2025-05", "dia_semana": "Qua", "fat_total": 14768.73, "serv_tx": 1090.42, "fat_real": 14768.73, "pessoas": 172, "ticket_medio": 92.2, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 15859.15, "meta_salao": 15859.15, "meta_delivery": 0.0}, {"data": "2025-05-08", "mes": "2025-05", "dia_semana": "Qui", "fat_total": 12237.16, "serv_tx": 808.74, "fat_real": 12237.16, "pessoas": 126, "ticket_medio": 103.54, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13045.9, "meta_salao": 13045.9, "meta_delivery": 0.0}, {"data": "2025-05-09", "mes": "2025-05", "dia_semana": "Sex", "fat_total": 23921.35, "serv_tx": 1802.18, "fat_real": 23921.35, "pessoas": 279, "ticket_medio": 92.2, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 25723.53, "meta_salao": 25723.53, "meta_delivery": 0.0}, {"data": "2025-05-10", "mes": "2025-05", "dia_semana": "Sáb", "fat_total": 39326.58, "serv_tx": 3360.79, "fat_real": 39326.58, "pessoas": 418, "ticket_medio": 102.12, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 42687.37, "meta_salao": 42687.37, "meta_delivery": 0.0}, {"data": "2025-05-11", "mes": "2025-05", "dia_semana": "Dom", "fat_total": 40981.6, "serv_tx": 2485.8, "fat_real": 40981.6, "pessoas": 442, "ticket_medio": 98.34, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 43467.4, "meta_salao": 43467.4, "meta_delivery": 0.0}, {"data": "2025-05-12", "mes": "2025-05", "dia_semana": "Seg", "fat_total": 11722.74, "serv_tx": 789.52, "fat_real": 11722.74, "pessoas": 132, "ticket_medio": 94.79, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12512.26, "meta_salao": 12512.26, "meta_delivery": 0.0}, {"data": "2025-05-13", "mes": "2025-05", "dia_semana": "Ter", "fat_total": 12070.76, "serv_tx": 892.56, "fat_real": 12070.76, "pessoas": 157, "ticket_medio": 82.57, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12963.32, "meta_salao": 12963.32, "meta_delivery": 0.0}, {"data": "2025-05-14", "mes": "2025-05", "dia_semana": "Qua", "fat_total": 12452.32, "serv_tx": 598.19, "fat_real": 12452.32, "pessoas": 118, "ticket_medio": 110.6, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13050.51, "meta_salao": 13050.51, "meta_delivery": 0.0}, {"data": "2025-05-15", "mes": "2025-05", "dia_semana": "Qui", "fat_total": 11643.19, "serv_tx": 920.71, "fat_real": 11643.19, "pessoas": 136, "ticket_medio": 92.38, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12563.9, "meta_salao": 12563.9, "meta_delivery": 0.0}, {"data": "2025-05-16", "mes": "2025-05", "dia_semana": "Sex", "fat_total": 27881.22, "serv_tx": 1658.12, "fat_real": 27881.22, "pessoas": 298, "ticket_medio": 99.13, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 29539.34, "meta_salao": 29539.34, "meta_delivery": 0.0}, {"data": "2025-05-17", "mes": "2025-05", "dia_semana": "Sáb", "fat_total": 29887.75, "serv_tx": 2811.89, "fat_real": 29887.75, "pessoas": 317, "ticket_medio": 103.15, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 32699.64, "meta_salao": 32699.64, "meta_delivery": 0.0}, {"data": "2025-05-18", "mes": "2025-05", "dia_semana": "Dom", "fat_total": 37840.21, "serv_tx": 3254.97, "fat_real": 37840.21, "pessoas": 385, "ticket_medio": 106.74, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 41095.18, "meta_salao": 41095.18, "meta_delivery": 0.0}, {"data": "2025-05-19", "mes": "2025-05", "dia_semana": "Seg", "fat_total": 7584.9, "serv_tx": 471.52, "fat_real": 7584.9, "pessoas": 82, "ticket_medio": 98.25, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8056.42, "meta_salao": 8056.42, "meta_delivery": 0.0}, {"data": "2025-05-20", "mes": "2025-05", "dia_semana": "Ter", "fat_total": 9656.1, "serv_tx": 605.91, "fat_real": 9656.1, "pessoas": 122, "ticket_medio": 84.11, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10262.01, "meta_salao": 10262.01, "meta_delivery": 0.0}, {"data": "2025-05-21", "mes": "2025-05", "dia_semana": "Qua", "fat_total": 12775.7, "serv_tx": 834.99, "fat_real": 12775.7, "pessoas": 158, "ticket_medio": 86.14, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13610.69, "meta_salao": 13610.69, "meta_delivery": 0.0}, {"data": "2025-05-22", "mes": "2025-05", "dia_semana": "Qui", "fat_total": 12371.87, "serv_tx": 619.57, "fat_real": 12371.87, "pessoas": 126, "ticket_medio": 103.11, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12991.44, "meta_salao": 12991.44, "meta_delivery": 0.0}, {"data": "2025-05-23", "mes": "2025-05", "dia_semana": "Sex", "fat_total": 21757.21, "serv_tx": 1481.02, "fat_real": 21757.21, "pessoas": 236, "ticket_medio": 98.47, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 23238.23, "meta_salao": 23238.23, "meta_delivery": 0.0}, {"data": "2025-05-24", "mes": "2025-05", "dia_semana": "Sáb", "fat_total": 36263.88, "serv_tx": 2219.41, "fat_real": 36263.88, "pessoas": 353, "ticket_medio": 109.02, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 38483.29, "meta_salao": 38483.29, "meta_delivery": 0.0}, {"data": "2025-05-25", "mes": "2025-05", "dia_semana": "Dom", "fat_total": 42688.11, "serv_tx": 3056.45, "fat_real": 42688.11, "pessoas": 421, "ticket_medio": 108.66, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 45744.56, "meta_salao": 45744.56, "meta_delivery": 0.0}, {"data": "2025-05-26", "mes": "2025-05", "dia_semana": "Seg", "fat_total": 11770.92, "serv_tx": 874.83, "fat_real": 11770.92, "pessoas": 160, "ticket_medio": 79.04, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12645.75, "meta_salao": 12645.75, "meta_delivery": 0.0}, {"data": "2025-05-27", "mes": "2025-05", "dia_semana": "Ter", "fat_total": 8381.42, "serv_tx": 558.35, "fat_real": 8381.42, "pessoas": 113, "ticket_medio": 79.11, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8939.77, "meta_salao": 8939.77, "meta_delivery": 0.0}, {"data": "2025-05-28", "mes": "2025-05", "dia_semana": "Qua", "fat_total": 8372.85, "serv_tx": 376.93, "fat_real": 8372.85, "pessoas": 92, "ticket_medio": 95.11, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8749.78, "meta_salao": 8749.78, "meta_delivery": 0.0}, {"data": "2025-05-29", "mes": "2025-05", "dia_semana": "Qui", "fat_total": 11929.13, "serv_tx": 588.12, "fat_real": 11929.13, "pessoas": 105, "ticket_medio": 119.21, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12517.25, "meta_salao": 12517.25, "meta_delivery": 0.0}, {"data": "2025-05-30", "mes": "2025-05", "dia_semana": "Sex", "fat_total": 27057.36, "serv_tx": 2129.37, "fat_real": 27057.36, "pessoas": 259, "ticket_medio": 112.69, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 29186.73, "meta_salao": 29186.73, "meta_delivery": 0.0}, {"data": "2025-05-31", "mes": "2025-05", "dia_semana": "Sáb", "fat_total": 28700.98, "serv_tx": 1938.16, "fat_real": 28700.98, "pessoas": 312, "ticket_medio": 98.2, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 30639.14, "meta_salao": 30639.14, "meta_delivery": 0.0}, {"data": "2025-06-01", "mes": "2025-06", "dia_semana": "Dom", "fat_total": 44933.86, "serv_tx": 3045.18, "fat_real": 44933.86, "pessoas": 435, "ticket_medio": 110.3, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 47979.04, "meta_salao": 47979.04, "meta_delivery": 0.0}, {"data": "2025-06-02", "mes": "2025-06", "dia_semana": "Seg", "fat_total": 7139.17, "serv_tx": 407.7, "fat_real": 7139.17, "pessoas": 78, "ticket_medio": 96.75, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 7546.87, "meta_salao": 7546.87, "meta_delivery": 0.0}, {"data": "2025-06-03", "mes": "2025-06", "dia_semana": "Ter", "fat_total": 8009.95, "serv_tx": 548.77, "fat_real": 8009.95, "pessoas": 106, "ticket_medio": 80.74, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8558.72, "meta_salao": 8558.72, "meta_delivery": 0.0}, {"data": "2025-06-04", "mes": "2025-06", "dia_semana": "Qua", "fat_total": 13162.18, "serv_tx": 638.72, "fat_real": 13162.18, "pessoas": 127, "ticket_medio": 108.67, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13800.9, "meta_salao": 13800.9, "meta_delivery": 0.0}, {"data": "2025-06-05", "mes": "2025-06", "dia_semana": "Qui", "fat_total": 15719.93, "serv_tx": 1104.37, "fat_real": 15719.93, "pessoas": 173, "ticket_medio": 97.25, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 16824.3, "meta_salao": 16824.3, "meta_delivery": 0.0}, {"data": "2025-06-06", "mes": "2025-06", "dia_semana": "Sex", "fat_total": 29419.82, "serv_tx": 1861.62, "fat_real": 29419.82, "pessoas": 284, "ticket_medio": 110.15, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 31281.44, "meta_salao": 31281.44, "meta_delivery": 0.0}, {"data": "2025-06-07", "mes": "2025-06", "dia_semana": "Sáb", "fat_total": 32104.17, "serv_tx": 2026.84, "fat_real": 32104.17, "pessoas": 347, "ticket_medio": 98.36, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 34131.01, "meta_salao": 34131.01, "meta_delivery": 0.0}, {"data": "2025-06-08", "mes": "2025-06", "dia_semana": "Dom", "fat_total": 47811.27, "serv_tx": 3434.98, "fat_real": 47811.27, "pessoas": 462, "ticket_medio": 110.92, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 51246.25, "meta_salao": 51246.25, "meta_delivery": 0.0}, {"data": "2025-06-09", "mes": "2025-06", "dia_semana": "Seg", "fat_total": 10538.82, "serv_tx": 641.3, "fat_real": 10538.82, "pessoas": 120, "ticket_medio": 93.17, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11180.12, "meta_salao": 11180.12, "meta_delivery": 0.0}, {"data": "2025-06-10", "mes": "2025-06", "dia_semana": "Ter", "fat_total": 11475.41, "serv_tx": 652.59, "fat_real": 11475.41, "pessoas": 115, "ticket_medio": 105.46, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12128.0, "meta_salao": 12128.0, "meta_delivery": 0.0}, {"data": "2025-06-11", "mes": "2025-06", "dia_semana": "Qua", "fat_total": 9078.85, "serv_tx": 720.86, "fat_real": 9078.85, "pessoas": 120, "ticket_medio": 81.66, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9799.71, "meta_salao": 9799.71, "meta_delivery": 0.0}, {"data": "2025-06-12", "mes": "2025-06", "dia_semana": "Qui", "fat_total": 43449.71, "serv_tx": 3331.72, "fat_real": 43449.71, "pessoas": 419, "ticket_medio": 111.65, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 46781.43, "meta_salao": 46781.43, "meta_delivery": 0.0}, {"data": "2025-06-13", "mes": "2025-06", "dia_semana": "Sex", "fat_total": 21352.8, "serv_tx": 1127.8, "fat_real": 21352.8, "pessoas": 206, "ticket_medio": 109.13, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 22480.6, "meta_salao": 22480.6, "meta_delivery": 0.0}, {"data": "2025-06-14", "mes": "2025-06", "dia_semana": "Sáb", "fat_total": 35791.55, "serv_tx": 2436.32, "fat_real": 35791.55, "pessoas": 380, "ticket_medio": 100.6, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 38227.87, "meta_salao": 38227.87, "meta_delivery": 0.0}, {"data": "2025-06-15", "mes": "2025-06", "dia_semana": "Dom", "fat_total": 47516.89, "serv_tx": 3556.89, "fat_real": 47516.89, "pessoas": 485, "ticket_medio": 105.31, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 51073.78, "meta_salao": 51073.78, "meta_delivery": 0.0}, {"data": "2025-06-16", "mes": "2025-06", "dia_semana": "Seg", "fat_total": 8258.83, "serv_tx": 414.81, "fat_real": 8258.83, "pessoas": 80, "ticket_medio": 108.42, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8673.64, "meta_salao": 8673.64, "meta_delivery": 0.0}, {"data": "2025-06-17", "mes": "2025-06", "dia_semana": "Ter", "fat_total": 10073.66, "serv_tx": 600.74, "fat_real": 10073.66, "pessoas": 109, "ticket_medio": 97.93, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10674.4, "meta_salao": 10674.4, "meta_delivery": 0.0}, {"data": "2025-06-18", "mes": "2025-06", "dia_semana": "Qua", "fat_total": 13338.4, "serv_tx": 792.73, "fat_real": 13338.4, "pessoas": 136, "ticket_medio": 103.91, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 14131.13, "meta_salao": 14131.13, "meta_delivery": 0.0}, {"data": "2025-06-19", "mes": "2025-06", "dia_semana": "Qui", "fat_total": 25707.16, "serv_tx": 1731.72, "fat_real": 25707.16, "pessoas": 281, "ticket_medio": 97.65, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 27438.88, "meta_salao": 27438.88, "meta_delivery": 0.0}, {"data": "2025-06-20", "mes": "2025-06", "dia_semana": "Sex", "fat_total": 21880.69, "serv_tx": 1145.99, "fat_real": 21880.69, "pessoas": 219, "ticket_medio": 105.14, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 23026.68, "meta_salao": 23026.68, "meta_delivery": 0.0}, {"data": "2025-06-21", "mes": "2025-06", "dia_semana": "Sáb", "fat_total": 26719.71, "serv_tx": 1746.61, "fat_real": 26719.71, "pessoas": 262, "ticket_medio": 108.65, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 28466.32, "meta_salao": 28466.32, "meta_delivery": 0.0}, {"data": "2025-06-22", "mes": "2025-06", "dia_semana": "Dom", "fat_total": 36771.27, "serv_tx": 2309.59, "fat_real": 36771.27, "pessoas": 392, "ticket_medio": 99.7, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 39080.86, "meta_salao": 39080.86, "meta_delivery": 0.0}, {"data": "2025-06-23", "mes": "2025-06", "dia_semana": "Seg", "fat_total": 11221.11, "serv_tx": 669.22, "fat_real": 11221.11, "pessoas": 151, "ticket_medio": 78.74, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11890.33, "meta_salao": 11890.33, "meta_delivery": 0.0}, {"data": "2025-06-24", "mes": "2025-06", "dia_semana": "Ter", "fat_total": 10054.99, "serv_tx": 567.91, "fat_real": 10054.99, "pessoas": 104, "ticket_medio": 102.14, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10622.9, "meta_salao": 10622.9, "meta_delivery": 0.0}, {"data": "2025-06-25", "mes": "2025-06", "dia_semana": "Qua", "fat_total": 12538.71, "serv_tx": 725.37, "fat_real": 12538.71, "pessoas": 149, "ticket_medio": 89.02, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13264.08, "meta_salao": 13264.08, "meta_delivery": 0.0}, {"data": "2025-06-26", "mes": "2025-06", "dia_semana": "Qui", "fat_total": 14873.45, "serv_tx": 983.15, "fat_real": 14873.45, "pessoas": 175, "ticket_medio": 90.61, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 15856.6, "meta_salao": 15856.6, "meta_delivery": 0.0}, {"data": "2025-06-27", "mes": "2025-06", "dia_semana": "Sex", "fat_total": 25093.23, "serv_tx": 1933.82, "fat_real": 25093.23, "pessoas": 230, "ticket_medio": 117.51, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 27027.05, "meta_salao": 27027.05, "meta_delivery": 0.0}, {"data": "2025-06-28", "mes": "2025-06", "dia_semana": "Sáb", "fat_total": 33893.08, "serv_tx": 2536.58, "fat_real": 33893.08, "pessoas": 328, "ticket_medio": 111.07, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 36429.66, "meta_salao": 36429.66, "meta_delivery": 0.0}, {"data": "2025-06-29", "mes": "2025-06", "dia_semana": "Dom", "fat_total": 39432.22, "serv_tx": 2607.0, "fat_real": 39432.22, "pessoas": 380, "ticket_medio": 110.63, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 42039.22, "meta_salao": 42039.22, "meta_delivery": 0.0}, {"data": "2025-06-30", "mes": "2025-06", "dia_semana": "Seg", "fat_total": 11797.84, "serv_tx": 717.32, "fat_real": 11797.84, "pessoas": 156, "ticket_medio": 80.23, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12515.16, "meta_salao": 12515.16, "meta_delivery": 0.0}, {"data": "2025-07-01", "mes": "2025-07", "dia_semana": "Ter", "fat_total": 15174.48, "serv_tx": 1184.81, "fat_real": 15174.48, "pessoas": 170, "ticket_medio": 96.23, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 16359.29, "meta_salao": 16359.29, "meta_delivery": 0.0}, {"data": "2025-07-02", "mes": "2025-07", "dia_semana": "Qua", "fat_total": 12806.22, "serv_tx": 865.58, "fat_real": 12806.22, "pessoas": 129, "ticket_medio": 105.98, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13671.8, "meta_salao": 13671.8, "meta_delivery": 0.0}, {"data": "2025-07-03", "mes": "2025-07", "dia_semana": "Qui", "fat_total": 14937.19, "serv_tx": 1271.33, "fat_real": 14937.19, "pessoas": 186, "ticket_medio": 87.14, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 16208.52, "meta_salao": 16208.52, "meta_delivery": 0.0}, {"data": "2025-07-04", "mes": "2025-07", "dia_semana": "Sex", "fat_total": 30184.31, "serv_tx": 2350.06, "fat_real": 30184.31, "pessoas": 304, "ticket_medio": 107.02, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 32534.37, "meta_salao": 32534.37, "meta_delivery": 0.0}, {"data": "2025-07-05", "mes": "2025-07", "dia_semana": "Sáb", "fat_total": 26876.5, "serv_tx": 1713.82, "fat_real": 26876.5, "pessoas": 285, "ticket_medio": 100.32, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 28590.32, "meta_salao": 28590.32, "meta_delivery": 0.0}, {"data": "2025-07-06", "mes": "2025-07", "dia_semana": "Dom", "fat_total": 39060.97, "serv_tx": 2655.12, "fat_real": 39060.97, "pessoas": 379, "ticket_medio": 110.07, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 41716.09, "meta_salao": 41716.09, "meta_delivery": 0.0}, {"data": "2025-07-07", "mes": "2025-07", "dia_semana": "Seg", "fat_total": 9761.05, "serv_tx": 484.38, "fat_real": 9761.05, "pessoas": 106, "ticket_medio": 96.66, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10245.43, "meta_salao": 10245.43, "meta_delivery": 0.0}, {"data": "2025-07-08", "mes": "2025-07", "dia_semana": "Ter", "fat_total": 14241.17, "serv_tx": 1023.45, "fat_real": 14241.17, "pessoas": 137, "ticket_medio": 111.42, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 15264.62, "meta_salao": 15264.62, "meta_delivery": 0.0}, {"data": "2025-07-09", "mes": "2025-07", "dia_semana": "Qua", "fat_total": 10868.49, "serv_tx": 734.4, "fat_real": 10868.49, "pessoas": 149, "ticket_medio": 77.87, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11602.89, "meta_salao": 11602.89, "meta_delivery": 0.0}, {"data": "2025-07-10", "mes": "2025-07", "dia_semana": "Qui", "fat_total": 32472.79, "serv_tx": 1931.89, "fat_real": 32472.79, "pessoas": 328, "ticket_medio": 104.89, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 34404.68, "meta_salao": 34404.68, "meta_delivery": 0.0}, {"data": "2025-07-11", "mes": "2025-07", "dia_semana": "Sex", "fat_total": 25826.87, "serv_tx": 1467.74, "fat_real": 25826.87, "pessoas": 275, "ticket_medio": 99.25, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 27294.61, "meta_salao": 27294.61, "meta_delivery": 0.0}, {"data": "2025-07-12", "mes": "2025-07", "dia_semana": "Sáb", "fat_total": 36677.44, "serv_tx": 2560.79, "fat_real": 36677.44, "pessoas": 403, "ticket_medio": 97.37, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 39238.23, "meta_salao": 39238.23, "meta_delivery": 0.0}, {"data": "2025-07-13", "mes": "2025-07", "dia_semana": "Dom", "fat_total": 38309.87, "serv_tx": 2711.85, "fat_real": 38309.87, "pessoas": 428, "ticket_medio": 95.85, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 41021.72, "meta_salao": 41021.72, "meta_delivery": 0.0}, {"data": "2025-07-14", "mes": "2025-07", "dia_semana": "Seg", "fat_total": 6552.45, "serv_tx": 422.09, "fat_real": 6552.45, "pessoas": 70, "ticket_medio": 99.64, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 6974.54, "meta_salao": 6974.54, "meta_delivery": 0.0}, {"data": "2025-07-15", "mes": "2025-07", "dia_semana": "Ter", "fat_total": 16113.88, "serv_tx": 1038.22, "fat_real": 16113.88, "pessoas": 155, "ticket_medio": 110.66, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 17152.1, "meta_salao": 17152.1, "meta_delivery": 0.0}, {"data": "2025-07-16", "mes": "2025-07", "dia_semana": "Qua", "fat_total": 14142.12, "serv_tx": 943.17, "fat_real": 14142.12, "pessoas": 147, "ticket_medio": 102.62, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 15085.29, "meta_salao": 15085.29, "meta_delivery": 0.0}, {"data": "2025-07-17", "mes": "2025-07", "dia_semana": "Qui", "fat_total": 13066.16, "serv_tx": 736.25, "fat_real": 13066.16, "pessoas": 147, "ticket_medio": 93.89, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13802.41, "meta_salao": 13802.41, "meta_delivery": 0.0}, {"data": "2025-07-18", "mes": "2025-07", "dia_semana": "Sex", "fat_total": 28850.3, "serv_tx": 1589.68, "fat_real": 28850.3, "pessoas": 301, "ticket_medio": 101.13, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 30439.98, "meta_salao": 30439.98, "meta_delivery": 0.0}, {"data": "2025-07-19", "mes": "2025-07", "dia_semana": "Sáb", "fat_total": 31741.83, "serv_tx": 2063.49, "fat_real": 31741.83, "pessoas": 360, "ticket_medio": 93.9, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 33805.32, "meta_salao": 33805.32, "meta_delivery": 0.0}, {"data": "2025-07-20", "mes": "2025-07", "dia_semana": "Dom", "fat_total": 39634.82, "serv_tx": 2315.43, "fat_real": 39634.82, "pessoas": 404, "ticket_medio": 103.84, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 41950.25, "meta_salao": 41950.25, "meta_delivery": 0.0}, {"data": "2025-07-21", "mes": "2025-07", "dia_semana": "Seg", "fat_total": 14367.24, "serv_tx": 912.98, "fat_real": 14367.24, "pessoas": 174, "ticket_medio": 87.82, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 15280.22, "meta_salao": 15280.22, "meta_delivery": 0.0}, {"data": "2025-07-22", "mes": "2025-07", "dia_semana": "Ter", "fat_total": 11582.15, "serv_tx": 645.11, "fat_real": 11582.15, "pessoas": 124, "ticket_medio": 98.61, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12227.26, "meta_salao": 12227.26, "meta_delivery": 0.0}, {"data": "2025-07-23", "mes": "2025-07", "dia_semana": "Qua", "fat_total": 13493.98, "serv_tx": 755.05, "fat_real": 13493.98, "pessoas": 154, "ticket_medio": 92.53, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 14249.03, "meta_salao": 14249.03, "meta_delivery": 0.0}, {"data": "2025-07-24", "mes": "2025-07", "dia_semana": "Qui", "fat_total": 19831.18, "serv_tx": 912.23, "fat_real": 19831.18, "pessoas": 219, "ticket_medio": 94.72, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 20743.41, "meta_salao": 20743.41, "meta_delivery": 0.0}, {"data": "2025-07-25", "mes": "2025-07", "dia_semana": "Sex", "fat_total": 26415.94, "serv_tx": 1714.43, "fat_real": 26415.94, "pessoas": 264, "ticket_medio": 106.55, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 28130.37, "meta_salao": 28130.37, "meta_delivery": 0.0}, {"data": "2025-07-26", "mes": "2025-07", "dia_semana": "Sáb", "fat_total": 35567.42, "serv_tx": 1864.69, "fat_real": 35567.42, "pessoas": 342, "ticket_medio": 109.45, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 37432.11, "meta_salao": 37432.11, "meta_delivery": 0.0}, {"data": "2025-07-27", "mes": "2025-07", "dia_semana": "Dom", "fat_total": 45993.15, "serv_tx": 3176.03, "fat_real": 45993.15, "pessoas": 432, "ticket_medio": 113.82, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 49169.18, "meta_salao": 49169.18, "meta_delivery": 0.0}, {"data": "2025-07-28", "mes": "2025-07", "dia_semana": "Seg", "fat_total": 12244.46, "serv_tx": 696.0, "fat_real": 12244.46, "pessoas": 118, "ticket_medio": 109.66, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12940.46, "meta_salao": 12940.46, "meta_delivery": 0.0}, {"data": "2025-07-29", "mes": "2025-07", "dia_semana": "Ter", "fat_total": 13806.82, "serv_tx": 836.46, "fat_real": 13806.82, "pessoas": 136, "ticket_medio": 107.67, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 14643.28, "meta_salao": 14643.28, "meta_delivery": 0.0}, {"data": "2025-07-30", "mes": "2025-07", "dia_semana": "Qua", "fat_total": 21460.5, "serv_tx": 1408.41, "fat_real": 21460.5, "pessoas": 232, "ticket_medio": 98.57, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 22868.91, "meta_salao": 22868.91, "meta_delivery": 0.0}, {"data": "2025-07-31", "mes": "2025-07", "dia_semana": "Qui", "fat_total": 16909.37, "serv_tx": 1082.27, "fat_real": 16909.37, "pessoas": 135, "ticket_medio": 133.27, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 17991.64, "meta_salao": 17991.64, "meta_delivery": 0.0}, {"data": "2025-08-01", "mes": "2025-08", "dia_semana": "Sex", "fat_total": 31551.71, "serv_tx": 2050.53, "fat_real": 31551.71, "pessoas": 310, "ticket_medio": 108.39, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 33602.24, "meta_salao": 33602.24, "meta_delivery": 0.0}, {"data": "2025-08-02", "mes": "2025-08", "dia_semana": "Sáb", "fat_total": 31714.63, "serv_tx": 1927.54, "fat_real": 31714.63, "pessoas": 317, "ticket_medio": 106.13, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 33642.17, "meta_salao": 33642.17, "meta_delivery": 0.0}, {"data": "2025-08-03", "mes": "2025-08", "dia_semana": "Dom", "fat_total": 45214.73, "serv_tx": 3282.27, "fat_real": 45214.73, "pessoas": 442, "ticket_medio": 109.72, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 48497.0, "meta_salao": 48497.0, "meta_delivery": 0.0}, {"data": "2025-08-04", "mes": "2025-08", "dia_semana": "Seg", "fat_total": 7127.97, "serv_tx": 372.28, "fat_real": 7127.97, "pessoas": 83, "ticket_medio": 90.36, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 7500.25, "meta_salao": 7500.25, "meta_delivery": 0.0}, {"data": "2025-08-05", "mes": "2025-08", "dia_semana": "Ter", "fat_total": 13869.12, "serv_tx": 980.27, "fat_real": 13869.12, "pessoas": 149, "ticket_medio": 99.66, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 14849.39, "meta_salao": 14849.39, "meta_delivery": 0.0}, {"data": "2025-08-06", "mes": "2025-08", "dia_semana": "Qua", "fat_total": 12380.59, "serv_tx": 673.43, "fat_real": 12380.59, "pessoas": 137, "ticket_medio": 95.28, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13054.02, "meta_salao": 13054.02, "meta_delivery": 0.0}, {"data": "2025-08-07", "mes": "2025-08", "dia_semana": "Qui", "fat_total": 11691.37, "serv_tx": 605.72, "fat_real": 11691.37, "pessoas": 127, "ticket_medio": 96.83, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12297.09, "meta_salao": 12297.09, "meta_delivery": 0.0}, {"data": "2025-08-08", "mes": "2025-08", "dia_semana": "Sex", "fat_total": 27723.5, "serv_tx": 1597.52, "fat_real": 27723.5, "pessoas": 253, "ticket_medio": 115.89, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 29321.02, "meta_salao": 29321.02, "meta_delivery": 0.0}, {"data": "2025-08-09", "mes": "2025-08", "dia_semana": "Sáb", "fat_total": 29128.16, "serv_tx": 1744.1, "fat_real": 29128.16, "pessoas": 285, "ticket_medio": 108.32, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 30872.26, "meta_salao": 30872.26, "meta_delivery": 0.0}, {"data": "2025-08-10", "mes": "2025-08", "dia_semana": "Dom", "fat_total": 51823.24, "serv_tx": 3804.17, "fat_real": 51823.24, "pessoas": 501, "ticket_medio": 111.03, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 55627.41, "meta_salao": 55627.41, "meta_delivery": 0.0}, {"data": "2025-08-11", "mes": "2025-08", "dia_semana": "Seg", "fat_total": 8897.16, "serv_tx": 568.48, "fat_real": 8897.16, "pessoas": 112, "ticket_medio": 84.51, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9465.64, "meta_salao": 9465.64, "meta_delivery": 0.0}, {"data": "2025-08-12", "mes": "2025-08", "dia_semana": "Ter", "fat_total": 13754.04, "serv_tx": 1006.48, "fat_real": 13754.04, "pessoas": 144, "ticket_medio": 102.5, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 14760.52, "meta_salao": 14760.52, "meta_delivery": 0.0}, {"data": "2025-08-13", "mes": "2025-08", "dia_semana": "Qua", "fat_total": 10152.6, "serv_tx": 627.84, "fat_real": 10152.6, "pessoas": 98, "ticket_medio": 110.0, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10780.44, "meta_salao": 10780.44, "meta_delivery": 0.0}, {"data": "2025-08-14", "mes": "2025-08", "dia_semana": "Qui", "fat_total": 12561.33, "serv_tx": 726.11, "fat_real": 12561.33, "pessoas": 120, "ticket_medio": 110.73, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13287.44, "meta_salao": 13287.44, "meta_delivery": 0.0}, {"data": "2025-08-15", "mes": "2025-08", "dia_semana": "Sex", "fat_total": 24907.44, "serv_tx": 1462.94, "fat_real": 24907.44, "pessoas": 240, "ticket_medio": 109.88, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 26370.38, "meta_salao": 26370.38, "meta_delivery": 0.0}, {"data": "2025-08-16", "mes": "2025-08", "dia_semana": "Sáb", "fat_total": 37335.01, "serv_tx": 2333.52, "fat_real": 37335.01, "pessoas": 383, "ticket_medio": 103.57, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 39668.53, "meta_salao": 39668.53, "meta_delivery": 0.0}, {"data": "2025-08-17", "mes": "2025-08", "dia_semana": "Dom", "fat_total": 39498.14, "serv_tx": 3107.47, "fat_real": 39498.14, "pessoas": 392, "ticket_medio": 108.69, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 42605.61, "meta_salao": 42605.61, "meta_delivery": 0.0}, {"data": "2025-08-18", "mes": "2025-08", "dia_semana": "Seg", "fat_total": 11854.1, "serv_tx": 682.41, "fat_real": 11854.1, "pessoas": 151, "ticket_medio": 83.02, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12536.51, "meta_salao": 12536.51, "meta_delivery": 0.0}, {"data": "2025-08-19", "mes": "2025-08", "dia_semana": "Ter", "fat_total": 12523.7, "serv_tx": 854.47, "fat_real": 12523.7, "pessoas": 141, "ticket_medio": 94.88, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13378.17, "meta_salao": 13378.17, "meta_delivery": 0.0}, {"data": "2025-08-20", "mes": "2025-08", "dia_semana": "Qua", "fat_total": 11226.29, "serv_tx": 620.4, "fat_real": 11226.29, "pessoas": 103, "ticket_medio": 115.02, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11846.69, "meta_salao": 11846.69, "meta_delivery": 0.0}, {"data": "2025-08-21", "mes": "2025-08", "dia_semana": "Qui", "fat_total": 15207.98, "serv_tx": 1138.2, "fat_real": 15207.98, "pessoas": 197, "ticket_medio": 82.98, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 16346.18, "meta_salao": 16346.18, "meta_delivery": 0.0}, {"data": "2025-08-22", "mes": "2025-08", "dia_semana": "Sex", "fat_total": 26015.93, "serv_tx": 1528.85, "fat_real": 26015.93, "pessoas": 274, "ticket_medio": 100.53, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 27544.78, "meta_salao": 27544.78, "meta_delivery": 0.0}, {"data": "2025-08-23", "mes": "2025-08", "dia_semana": "Sáb", "fat_total": 34749.97, "serv_tx": 2481.37, "fat_real": 34749.97, "pessoas": 369, "ticket_medio": 100.9, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 37231.34, "meta_salao": 37231.34, "meta_delivery": 0.0}, {"data": "2025-08-24", "mes": "2025-08", "dia_semana": "Dom", "fat_total": 43916.08, "serv_tx": 3530.43, "fat_real": 43916.08, "pessoas": 487, "ticket_medio": 97.43, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 47446.51, "meta_salao": 47446.51, "meta_delivery": 0.0}, {"data": "2025-08-25", "mes": "2025-08", "dia_semana": "Seg", "fat_total": 8790.3, "serv_tx": 501.84, "fat_real": 8790.3, "pessoas": 98, "ticket_medio": 94.82, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9292.14, "meta_salao": 9292.14, "meta_delivery": 0.0}, {"data": "2025-08-26", "mes": "2025-08", "dia_semana": "Ter", "fat_total": 11003.36, "serv_tx": 777.47, "fat_real": 11003.36, "pessoas": 120, "ticket_medio": 98.17, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11780.83, "meta_salao": 11780.83, "meta_delivery": 0.0}, {"data": "2025-08-27", "mes": "2025-08", "dia_semana": "Qua", "fat_total": 13978.26, "serv_tx": 885.7, "fat_real": 13978.26, "pessoas": 182, "ticket_medio": 81.67, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 14863.96, "meta_salao": 14863.96, "meta_delivery": 0.0}, {"data": "2025-08-28", "mes": "2025-08", "dia_semana": "Qui", "fat_total": 14324.51, "serv_tx": 1054.09, "fat_real": 14324.51, "pessoas": 164, "ticket_medio": 93.77, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 15378.6, "meta_salao": 15378.6, "meta_delivery": 0.0}, {"data": "2025-08-29", "mes": "2025-08", "dia_semana": "Sex", "fat_total": 25046.86, "serv_tx": 1874.24, "fat_real": 25046.86, "pessoas": 252, "ticket_medio": 106.83, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 26921.1, "meta_salao": 26921.1, "meta_delivery": 0.0}, {"data": "2025-08-30", "mes": "2025-08", "dia_semana": "Sáb", "fat_total": 36135.63, "serv_tx": 2321.65, "fat_real": 36135.63, "pessoas": 354, "ticket_medio": 108.64, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 38457.28, "meta_salao": 38457.28, "meta_delivery": 0.0}, {"data": "2025-08-31", "mes": "2025-08", "dia_semana": "Dom", "fat_total": 45545.15, "serv_tx": 3029.36, "fat_real": 45545.15, "pessoas": 476, "ticket_medio": 102.05, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 48574.51, "meta_salao": 48574.51, "meta_delivery": 0.0}, {"data": "2025-09-01", "mes": "2025-09", "dia_semana": "Seg", "fat_total": 11397.09, "serv_tx": 649.61, "fat_real": 11397.09, "pessoas": 133, "ticket_medio": 90.58, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12046.7, "meta_salao": 12046.7, "meta_delivery": 0.0}, {"data": "2025-09-02", "mes": "2025-09", "dia_semana": "Ter", "fat_total": 11528.34, "serv_tx": 665.03, "fat_real": 11528.34, "pessoas": 122, "ticket_medio": 99.95, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12193.37, "meta_salao": 12193.37, "meta_delivery": 0.0}, {"data": "2025-09-03", "mes": "2025-09", "dia_semana": "Qua", "fat_total": 11474.72, "serv_tx": 772.79, "fat_real": 11474.72, "pessoas": 125, "ticket_medio": 97.98, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12247.51, "meta_salao": 12247.51, "meta_delivery": 0.0}, {"data": "2025-09-04", "mes": "2025-09", "dia_semana": "Qui", "fat_total": 21887.7, "serv_tx": 1362.08, "fat_real": 21887.7, "pessoas": 195, "ticket_medio": 119.23, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 23249.78, "meta_salao": 23249.78, "meta_delivery": 0.0}, {"data": "2025-09-05", "mes": "2025-09", "dia_semana": "Sex", "fat_total": 31391.94, "serv_tx": 2333.41, "fat_real": 31391.94, "pessoas": 335, "ticket_medio": 100.67, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 33725.35, "meta_salao": 33725.35, "meta_delivery": 0.0}, {"data": "2025-09-06", "mes": "2025-09", "dia_semana": "Sáb", "fat_total": 31519.74, "serv_tx": 2801.36, "fat_real": 31519.74, "pessoas": 367, "ticket_medio": 93.52, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 34321.1, "meta_salao": 34321.1, "meta_delivery": 0.0}, {"data": "2025-09-07", "mes": "2025-09", "dia_semana": "Dom", "fat_total": 38180.33, "serv_tx": 3033.88, "fat_real": 38180.33, "pessoas": 387, "ticket_medio": 106.5, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 41214.21, "meta_salao": 41214.21, "meta_delivery": 0.0}, {"data": "2025-09-08", "mes": "2025-09", "dia_semana": "Seg", "fat_total": 7831.54, "serv_tx": 521.33, "fat_real": 7831.54, "pessoas": 103, "ticket_medio": 81.1, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8352.87, "meta_salao": 8352.87, "meta_delivery": 0.0}, {"data": "2025-09-09", "mes": "2025-09", "dia_semana": "Ter", "fat_total": 13341.3, "serv_tx": 913.68, "fat_real": 13341.3, "pessoas": 149, "ticket_medio": 95.67, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 14254.98, "meta_salao": 14254.98, "meta_delivery": 0.0}, {"data": "2025-09-10", "mes": "2025-09", "dia_semana": "Qua", "fat_total": 12670.33, "serv_tx": 928.06, "fat_real": 12670.33, "pessoas": 170, "ticket_medio": 79.99, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13598.39, "meta_salao": 13598.39, "meta_delivery": 0.0}, {"data": "2025-09-11", "mes": "2025-09", "dia_semana": "Qui", "fat_total": 14654.7, "serv_tx": 1205.44, "fat_real": 14654.7, "pessoas": 170, "ticket_medio": 93.29, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 15860.14, "meta_salao": 15860.14, "meta_delivery": 0.0}, {"data": "2025-09-12", "mes": "2025-09", "dia_semana": "Sex", "fat_total": 19503.01, "serv_tx": 1550.13, "fat_real": 19503.01, "pessoas": 191, "ticket_medio": 110.23, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 21053.14, "meta_salao": 21053.14, "meta_delivery": 0.0}, {"data": "2025-09-13", "mes": "2025-09", "dia_semana": "Sáb", "fat_total": 31966.64, "serv_tx": 2676.14, "fat_real": 31966.64, "pessoas": 315, "ticket_medio": 109.98, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 34642.78, "meta_salao": 34642.78, "meta_delivery": 0.0}, {"data": "2025-09-14", "mes": "2025-09", "dia_semana": "Dom", "fat_total": 39035.96, "serv_tx": 3469.37, "fat_real": 39035.96, "pessoas": 407, "ticket_medio": 104.44, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 42505.33, "meta_salao": 42505.33, "meta_delivery": 0.0}, {"data": "2025-09-15", "mes": "2025-09", "dia_semana": "Seg", "fat_total": 7921.05, "serv_tx": 614.18, "fat_real": 7921.05, "pessoas": 81, "ticket_medio": 105.37, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8535.23, "meta_salao": 8535.23, "meta_delivery": 0.0}, {"data": "2025-09-16", "mes": "2025-09", "dia_semana": "Ter", "fat_total": 8645.18, "serv_tx": 559.41, "fat_real": 8645.18, "pessoas": 81, "ticket_medio": 113.64, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9204.59, "meta_salao": 9204.59, "meta_delivery": 0.0}, {"data": "2025-09-17", "mes": "2025-09", "dia_semana": "Qua", "fat_total": 19658.88, "serv_tx": 1600.6, "fat_real": 19658.88, "pessoas": 252, "ticket_medio": 84.36, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 21259.48, "meta_salao": 21259.48, "meta_delivery": 0.0}, {"data": "2025-09-18", "mes": "2025-09", "dia_semana": "Qui", "fat_total": 11870.89, "serv_tx": 891.24, "fat_real": 11870.89, "pessoas": 141, "ticket_medio": 90.51, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12762.13, "meta_salao": 12762.13, "meta_delivery": 0.0}, {"data": "2025-09-19", "mes": "2025-09", "dia_semana": "Sex", "fat_total": 23431.04, "serv_tx": 1906.43, "fat_real": 23431.04, "pessoas": 210, "ticket_medio": 120.65, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 25337.47, "meta_salao": 25337.47, "meta_delivery": 0.0}, {"data": "2025-09-20", "mes": "2025-09", "dia_semana": "Sáb", "fat_total": 37263.57, "serv_tx": 3103.68, "fat_real": 37263.57, "pessoas": 412, "ticket_medio": 97.98, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 40367.25, "meta_salao": 40367.25, "meta_delivery": 0.0}, {"data": "2025-09-21", "mes": "2025-09", "dia_semana": "Dom", "fat_total": 38424.57, "serv_tx": 3455.47, "fat_real": 38424.57, "pessoas": 359, "ticket_medio": 116.66, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 41880.04, "meta_salao": 41880.04, "meta_delivery": 0.0}, {"data": "2025-09-22", "mes": "2025-09", "dia_semana": "Seg", "fat_total": 8049.02, "serv_tx": 524.58, "fat_real": 8049.02, "pessoas": 96, "ticket_medio": 89.31, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8573.6, "meta_salao": 8573.6, "meta_delivery": 0.0}, {"data": "2025-09-23", "mes": "2025-09", "dia_semana": "Ter", "fat_total": 10138.49, "serv_tx": 720.65, "fat_real": 10138.49, "pessoas": 105, "ticket_medio": 103.42, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10859.14, "meta_salao": 10859.14, "meta_delivery": 0.0}, {"data": "2025-09-24", "mes": "2025-09", "dia_semana": "Qua", "fat_total": 16334.08, "serv_tx": 1111.47, "fat_real": 16334.08, "pessoas": 216, "ticket_medio": 80.77, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 17445.55, "meta_salao": 17445.55, "meta_delivery": 0.0}, {"data": "2025-09-25", "mes": "2025-09", "dia_semana": "Qui", "fat_total": 11051.82, "serv_tx": 700.74, "fat_real": 11051.82, "pessoas": 104, "ticket_medio": 113.01, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11752.56, "meta_salao": 11752.56, "meta_delivery": 0.0}, {"data": "2025-09-26", "mes": "2025-09", "dia_semana": "Sex", "fat_total": 25912.6, "serv_tx": 2137.76, "fat_real": 25912.6, "pessoas": 261, "ticket_medio": 107.47, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 28050.36, "meta_salao": 28050.36, "meta_delivery": 0.0}, {"data": "2025-09-27", "mes": "2025-09", "dia_semana": "Sáb", "fat_total": 35662.32, "serv_tx": 3012.75, "fat_real": 35662.32, "pessoas": 334, "ticket_medio": 115.79, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 38675.07, "meta_salao": 38675.07, "meta_delivery": 0.0}, {"data": "2025-09-28", "mes": "2025-09", "dia_semana": "Dom", "fat_total": 39647.6, "serv_tx": 3193.52, "fat_real": 39647.6, "pessoas": 354, "ticket_medio": 121.02, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 42841.12, "meta_salao": 42841.12, "meta_delivery": 0.0}, {"data": "2025-09-29", "mes": "2025-09", "dia_semana": "Seg", "fat_total": 6876.28, "serv_tx": 338.06, "fat_real": 6876.28, "pessoas": 56, "ticket_medio": 128.83, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 7214.34, "meta_salao": 7214.34, "meta_delivery": 0.0}, {"data": "2025-09-30", "mes": "2025-09", "dia_semana": "Ter", "fat_total": 9688.77, "serv_tx": 486.28, "fat_real": 9688.77, "pessoas": 83, "ticket_medio": 122.59, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10175.05, "meta_salao": 10175.05, "meta_delivery": 0.0}, {"data": "2025-10-01", "mes": "2025-10", "dia_semana": "Qua", "fat_total": 13543.84, "serv_tx": 891.34, "fat_real": 13543.84, "pessoas": 117, "ticket_medio": 123.38, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 14435.18, "meta_salao": 14435.18, "meta_delivery": 0.0}, {"data": "2025-10-02", "mes": "2025-10", "dia_semana": "Qui", "fat_total": 11358.34, "serv_tx": 767.75, "fat_real": 11358.34, "pessoas": 95, "ticket_medio": 127.64, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12126.09, "meta_salao": 12126.09, "meta_delivery": 0.0}, {"data": "2025-10-03", "mes": "2025-10", "dia_semana": "Sex", "fat_total": 21835.65, "serv_tx": 1545.9, "fat_real": 21835.65, "pessoas": 202, "ticket_medio": 115.75, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 23381.55, "meta_salao": 23381.55, "meta_delivery": 0.0}, {"data": "2025-10-04", "mes": "2025-10", "dia_semana": "Sáb", "fat_total": 35653.32, "serv_tx": 2472.43, "fat_real": 35653.32, "pessoas": 348, "ticket_medio": 109.56, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 38125.75, "meta_salao": 38125.75, "meta_delivery": 0.0}, {"data": "2025-10-05", "mes": "2025-10", "dia_semana": "Dom", "fat_total": 36883.18, "serv_tx": 2836.9, "fat_real": 36883.18, "pessoas": 331, "ticket_medio": 120.0, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 39720.08, "meta_salao": 39720.08, "meta_delivery": 0.0}, {"data": "2025-10-06", "mes": "2025-10", "dia_semana": "Seg", "fat_total": 6271.95, "serv_tx": 416.15, "fat_real": 6271.95, "pessoas": 62, "ticket_medio": 107.87, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 6688.1, "meta_salao": 6688.1, "meta_delivery": 0.0}, {"data": "2025-10-07", "mes": "2025-10", "dia_semana": "Ter", "fat_total": 9294.99, "serv_tx": 809.35, "fat_real": 9294.99, "pessoas": 94, "ticket_medio": 107.49, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10104.34, "meta_salao": 10104.34, "meta_delivery": 0.0}, {"data": "2025-10-08", "mes": "2025-10", "dia_semana": "Qua", "fat_total": 10850.56, "serv_tx": 774.15, "fat_real": 10850.56, "pessoas": 104, "ticket_medio": 111.78, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11624.71, "meta_salao": 11624.71, "meta_delivery": 0.0}, {"data": "2025-10-09", "mes": "2025-10", "dia_semana": "Qui", "fat_total": 10195.82, "serv_tx": 704.18, "fat_real": 10195.82, "pessoas": 104, "ticket_medio": 104.81, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10900.0, "meta_salao": 10900.0, "meta_delivery": 0.0}, {"data": "2025-10-10", "mes": "2025-10", "dia_semana": "Sex", "fat_total": 24282.95, "serv_tx": 1487.77, "fat_real": 24282.95, "pessoas": 198, "ticket_medio": 130.16, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 25770.72, "meta_salao": 25770.72, "meta_delivery": 0.0}, {"data": "2025-10-11", "mes": "2025-10", "dia_semana": "Sáb", "fat_total": 35265.94, "serv_tx": 2764.61, "fat_real": 35265.94, "pessoas": 380, "ticket_medio": 100.08, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 38030.55, "meta_salao": 38030.55, "meta_delivery": 0.0}, {"data": "2025-10-12", "mes": "2025-10", "dia_semana": "Dom", "fat_total": 47312.91, "serv_tx": 3685.35, "fat_real": 47312.91, "pessoas": 477, "ticket_medio": 106.91, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 50998.26, "meta_salao": 50998.26, "meta_delivery": 0.0}, {"data": "2025-10-13", "mes": "2025-10", "dia_semana": "Seg", "fat_total": 8412.86, "serv_tx": 620.32, "fat_real": 8412.86, "pessoas": 101, "ticket_medio": 89.44, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9033.18, "meta_salao": 9033.18, "meta_delivery": 0.0}, {"data": "2025-10-14", "mes": "2025-10", "dia_semana": "Ter", "fat_total": 8946.75, "serv_tx": 633.04, "fat_real": 8946.75, "pessoas": 94, "ticket_medio": 101.91, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9579.79, "meta_salao": 9579.79, "meta_delivery": 0.0}, {"data": "2025-10-15", "mes": "2025-10", "dia_semana": "Qua", "fat_total": 12483.54, "serv_tx": 967.75, "fat_real": 12483.54, "pessoas": 125, "ticket_medio": 107.61, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13451.29, "meta_salao": 13451.29, "meta_delivery": 0.0}, {"data": "2025-10-16", "mes": "2025-10", "dia_semana": "Qui", "fat_total": 8913.63, "serv_tx": 593.04, "fat_real": 8913.63, "pessoas": 92, "ticket_medio": 103.33, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9506.67, "meta_salao": 9506.67, "meta_delivery": 0.0}, {"data": "2025-10-17", "mes": "2025-10", "dia_semana": "Sex", "fat_total": 23119.11, "serv_tx": 1475.72, "fat_real": 23119.11, "pessoas": 210, "ticket_medio": 117.12, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 24594.83, "meta_salao": 24594.83, "meta_delivery": 0.0}, {"data": "2025-10-18", "mes": "2025-10", "dia_semana": "Sáb", "fat_total": 36168.78, "serv_tx": 2734.74, "fat_real": 36168.78, "pessoas": 343, "ticket_medio": 113.42, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 38903.52, "meta_salao": 38903.52, "meta_delivery": 0.0}, {"data": "2025-10-19", "mes": "2025-10", "dia_semana": "Dom", "fat_total": 31946.38, "serv_tx": 2427.28, "fat_real": 31946.38, "pessoas": 250, "ticket_medio": 137.49, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 34373.66, "meta_salao": 34373.66, "meta_delivery": 0.0}, {"data": "2025-10-20", "mes": "2025-10", "dia_semana": "Seg", "fat_total": 7529.86, "serv_tx": 556.63, "fat_real": 7529.86, "pessoas": 75, "ticket_medio": 107.82, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8086.49, "meta_salao": 8086.49, "meta_delivery": 0.0}, {"data": "2025-10-21", "mes": "2025-10", "dia_semana": "Ter", "fat_total": 6641.47, "serv_tx": 420.98, "fat_real": 6641.47, "pessoas": 76, "ticket_medio": 92.93, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 7062.45, "meta_salao": 7062.45, "meta_delivery": 0.0}, {"data": "2025-10-22", "mes": "2025-10", "dia_semana": "Qua", "fat_total": 15349.27, "serv_tx": 1179.59, "fat_real": 15349.27, "pessoas": 123, "ticket_medio": 134.38, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 16528.86, "meta_salao": 16528.86, "meta_delivery": 0.0}, {"data": "2025-10-23", "mes": "2025-10", "dia_semana": "Qui", "fat_total": 20366.81, "serv_tx": 1295.03, "fat_real": 20366.81, "pessoas": 192, "ticket_medio": 112.82, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 21661.84, "meta_salao": 21661.84, "meta_delivery": 0.0}, {"data": "2025-10-24", "mes": "2025-10", "dia_semana": "Sex", "fat_total": 27429.75, "serv_tx": 2160.67, "fat_real": 27429.75, "pessoas": 255, "ticket_medio": 116.04, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 29590.42, "meta_salao": 29590.42, "meta_delivery": 0.0}, {"data": "2025-10-25", "mes": "2025-10", "dia_semana": "Sáb", "fat_total": 30947.35, "serv_tx": 2681.61, "fat_real": 30947.35, "pessoas": 305, "ticket_medio": 110.26, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 33628.96, "meta_salao": 33628.96, "meta_delivery": 0.0}, {"data": "2025-10-26", "mes": "2025-10", "dia_semana": "Dom", "fat_total": 43976.21, "serv_tx": 3567.96, "fat_real": 43976.21, "pessoas": 410, "ticket_medio": 115.96, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 47544.17, "meta_salao": 47544.17, "meta_delivery": 0.0}, {"data": "2025-10-27", "mes": "2025-10", "dia_semana": "Seg", "fat_total": 15417.61, "serv_tx": 1211.61, "fat_real": 15417.61, "pessoas": 164, "ticket_medio": 101.4, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 16629.22, "meta_salao": 16629.22, "meta_delivery": 0.0}, {"data": "2025-10-28", "mes": "2025-10", "dia_semana": "Ter", "fat_total": 11201.31, "serv_tx": 672.95, "fat_real": 11201.31, "pessoas": 101, "ticket_medio": 117.57, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11874.26, "meta_salao": 11874.26, "meta_delivery": 0.0}, {"data": "2025-10-29", "mes": "2025-10", "dia_semana": "Qua", "fat_total": 7861.76, "serv_tx": 538.42, "fat_real": 7861.76, "pessoas": 77, "ticket_medio": 109.09, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8400.18, "meta_salao": 8400.18, "meta_delivery": 0.0}, {"data": "2025-10-30", "mes": "2025-10", "dia_semana": "Qui", "fat_total": 10043.97, "serv_tx": 585.87, "fat_real": 10043.97, "pessoas": 95, "ticket_medio": 111.89, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10629.84, "meta_salao": 10629.84, "meta_delivery": 0.0}, {"data": "2025-10-31", "mes": "2025-10", "dia_semana": "Sex", "fat_total": 27714.05, "serv_tx": 2194.38, "fat_real": 27714.05, "pessoas": 271, "ticket_medio": 110.36, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 29908.43, "meta_salao": 29908.43, "meta_delivery": 0.0}, {"data": "2025-11-01", "mes": "2025-11", "dia_semana": "Sáb", "fat_total": 29986.72, "serv_tx": 2344.28, "fat_real": 29986.72, "pessoas": 278, "ticket_medio": 116.3, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 32331.0, "meta_salao": 32331.0, "meta_delivery": 0.0}, {"data": "2025-11-02", "mes": "2025-11", "dia_semana": "Dom", "fat_total": 43246.36, "serv_tx": 3142.65, "fat_real": 43246.36, "pessoas": 405, "ticket_medio": 114.54, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 46389.01, "meta_salao": 46389.01, "meta_delivery": 0.0}, {"data": "2025-11-03", "mes": "2025-11", "dia_semana": "Seg", "fat_total": 10424.53, "serv_tx": 705.93, "fat_real": 10424.53, "pessoas": 100, "ticket_medio": 111.3, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11130.46, "meta_salao": 11130.46, "meta_delivery": 0.0}, {"data": "2025-11-04", "mes": "2025-11", "dia_semana": "Ter", "fat_total": 8336.75, "serv_tx": 503.38, "fat_real": 8336.75, "pessoas": 78, "ticket_medio": 113.33, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8840.13, "meta_salao": 8840.13, "meta_delivery": 0.0}, {"data": "2025-11-05", "mes": "2025-11", "dia_semana": "Qua", "fat_total": 7991.0, "serv_tx": 491.18, "fat_real": 7991.0, "pessoas": 73, "ticket_medio": 116.19, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8482.18, "meta_salao": 8482.18, "meta_delivery": 0.0}, {"data": "2025-11-06", "mes": "2025-11", "dia_semana": "Qui", "fat_total": 10367.91, "serv_tx": 782.2, "fat_real": 10367.91, "pessoas": 102, "ticket_medio": 109.31, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11150.11, "meta_salao": 11150.11, "meta_delivery": 0.0}, {"data": "2025-11-07", "mes": "2025-11", "dia_semana": "Sex", "fat_total": 25270.19, "serv_tx": 1943.75, "fat_real": 25270.19, "pessoas": 223, "ticket_medio": 122.04, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 27213.94, "meta_salao": 27213.94, "meta_delivery": 0.0}, {"data": "2025-11-08", "mes": "2025-11", "dia_semana": "Sáb", "fat_total": 37690.85, "serv_tx": 3307.26, "fat_real": 37690.85, "pessoas": 399, "ticket_medio": 102.75, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 40998.11, "meta_salao": 40998.11, "meta_delivery": 0.0}, {"data": "2025-11-09", "mes": "2025-11", "dia_semana": "Dom", "fat_total": 43839.25, "serv_tx": 3586.89, "fat_real": 43839.25, "pessoas": 421, "ticket_medio": 112.65, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 47426.14, "meta_salao": 47426.14, "meta_delivery": 0.0}, {"data": "2025-11-10", "mes": "2025-11", "dia_semana": "Seg", "fat_total": 6328.19, "serv_tx": 429.64, "fat_real": 6328.19, "pessoas": 57, "ticket_medio": 118.56, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 6757.83, "meta_salao": 6757.83, "meta_delivery": 0.0}, {"data": "2025-11-11", "mes": "2025-11", "dia_semana": "Ter", "fat_total": 7360.93, "serv_tx": 414.34, "fat_real": 7360.93, "pessoas": 61, "ticket_medio": 127.46, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 7775.27, "meta_salao": 7775.27, "meta_delivery": 0.0}, {"data": "2025-11-12", "mes": "2025-11", "dia_semana": "Qua", "fat_total": 11180.43, "serv_tx": 777.36, "fat_real": 11180.43, "pessoas": 116, "ticket_medio": 103.08, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11957.79, "meta_salao": 11957.79, "meta_delivery": 0.0}, {"data": "2025-11-13", "mes": "2025-11", "dia_semana": "Qui", "fat_total": 14926.38, "serv_tx": 1160.17, "fat_real": 14926.38, "pessoas": 151, "ticket_medio": 106.53, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 16086.55, "meta_salao": 16086.55, "meta_delivery": 0.0}, {"data": "2025-11-14", "mes": "2025-11", "dia_semana": "Sex", "fat_total": 24928.84, "serv_tx": 2001.91, "fat_real": 24928.84, "pessoas": 250, "ticket_medio": 107.72, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 26930.75, "meta_salao": 26930.75, "meta_delivery": 0.0}, {"data": "2025-11-15", "mes": "2025-11", "dia_semana": "Sáb", "fat_total": 30330.25, "serv_tx": 2370.57, "fat_real": 30330.25, "pessoas": 321, "ticket_medio": 101.87, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 32700.82, "meta_salao": 32700.82, "meta_delivery": 0.0}, {"data": "2025-11-16", "mes": "2025-11", "dia_semana": "Dom", "fat_total": 41243.59, "serv_tx": 3321.13, "fat_real": 41243.59, "pessoas": 428, "ticket_medio": 104.12, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 44564.72, "meta_salao": 44564.72, "meta_delivery": 0.0}, {"data": "2025-11-17", "mes": "2025-11", "dia_semana": "Seg", "fat_total": 15441.7, "serv_tx": 1216.01, "fat_real": 15441.7, "pessoas": 164, "ticket_medio": 101.57, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 16657.71, "meta_salao": 16657.71, "meta_delivery": 0.0}, {"data": "2025-11-18", "mes": "2025-11", "dia_semana": "Ter", "fat_total": 7894.21, "serv_tx": 496.15, "fat_real": 7894.21, "pessoas": 75, "ticket_medio": 111.87, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8390.36, "meta_salao": 8390.36, "meta_delivery": 0.0}, {"data": "2025-11-19", "mes": "2025-11", "dia_semana": "Qua", "fat_total": 15694.48, "serv_tx": 993.27, "fat_real": 15694.48, "pessoas": 157, "ticket_medio": 106.29, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 16687.75, "meta_salao": 16687.75, "meta_delivery": 0.0}, {"data": "2025-11-20", "mes": "2025-11", "dia_semana": "Qui", "fat_total": 22907.16, "serv_tx": 1887.65, "fat_real": 22907.16, "pessoas": 202, "ticket_medio": 122.75, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 24794.81, "meta_salao": 24794.81, "meta_delivery": 0.0}, {"data": "2025-11-21", "mes": "2025-11", "dia_semana": "Sex", "fat_total": 23585.28, "serv_tx": 1761.72, "fat_real": 23585.28, "pessoas": 225, "ticket_medio": 112.65, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 25347.0, "meta_salao": 25347.0, "meta_delivery": 0.0}, {"data": "2025-11-22", "mes": "2025-11", "dia_semana": "Sáb", "fat_total": 35157.84, "serv_tx": 2918.01, "fat_real": 35157.84, "pessoas": 374, "ticket_medio": 101.81, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 38075.85, "meta_salao": 38075.85, "meta_delivery": 0.0}, {"data": "2025-11-23", "mes": "2025-11", "dia_semana": "Dom", "fat_total": 39433.73, "serv_tx": 3160.17, "fat_real": 39433.73, "pessoas": 375, "ticket_medio": 113.58, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 42593.9, "meta_salao": 42593.9, "meta_delivery": 0.0}, {"data": "2025-11-24", "mes": "2025-11", "dia_semana": "Seg", "fat_total": 7890.45, "serv_tx": 518.68, "fat_real": 7890.45, "pessoas": 85, "ticket_medio": 98.93, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8409.13, "meta_salao": 8409.13, "meta_delivery": 0.0}, {"data": "2025-11-25", "mes": "2025-11", "dia_semana": "Ter", "fat_total": 18628.13, "serv_tx": 1380.2, "fat_real": 18628.13, "pessoas": 196, "ticket_medio": 102.08, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 20008.33, "meta_salao": 20008.33, "meta_delivery": 0.0}, {"data": "2025-11-26", "mes": "2025-11", "dia_semana": "Qua", "fat_total": 12055.47, "serv_tx": 971.24, "fat_real": 12055.47, "pessoas": 136, "ticket_medio": 95.78, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13026.71, "meta_salao": 13026.71, "meta_delivery": 0.0}, {"data": "2025-11-27", "mes": "2025-11", "dia_semana": "Qui", "fat_total": 13046.12, "serv_tx": 750.59, "fat_real": 13046.12, "pessoas": 141, "ticket_medio": 97.85, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13796.71, "meta_salao": 13796.71, "meta_delivery": 0.0}, {"data": "2025-11-28", "mes": "2025-11", "dia_semana": "Sex", "fat_total": 29731.61, "serv_tx": 2451.17, "fat_real": 29731.61, "pessoas": 309, "ticket_medio": 104.15, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 32182.78, "meta_salao": 32182.78, "meta_delivery": 0.0}, {"data": "2025-11-29", "mes": "2025-11", "dia_semana": "Sáb", "fat_total": 33929.57, "serv_tx": 2734.15, "fat_real": 33929.57, "pessoas": 317, "ticket_medio": 115.66, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 36663.72, "meta_salao": 36663.72, "meta_delivery": 0.0}, {"data": "2025-11-30", "mes": "2025-11", "dia_semana": "Dom", "fat_total": 44581.13, "serv_tx": 3715.54, "fat_real": 44581.13, "pessoas": 443, "ticket_medio": 109.02, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 48296.67, "meta_salao": 48296.67, "meta_delivery": 0.0}, {"data": "2025-12-01", "mes": "2025-12", "dia_semana": "Seg", "fat_total": 12690.36, "serv_tx": 752.06, "fat_real": 12690.36, "pessoas": 129, "ticket_medio": 104.2, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13442.42, "meta_salao": 13442.42, "meta_delivery": 0.0}, {"data": "2025-12-02", "mes": "2025-12", "dia_semana": "Ter", "fat_total": 17531.77, "serv_tx": 1318.9, "fat_real": 17531.77, "pessoas": 216, "ticket_medio": 87.27, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 18850.67, "meta_salao": 18850.67, "meta_delivery": 0.0}, {"data": "2025-12-03", "mes": "2025-12", "dia_semana": "Qua", "fat_total": 13001.17, "serv_tx": 970.74, "fat_real": 13001.17, "pessoas": 121, "ticket_medio": 115.47, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13971.91, "meta_salao": 13971.91, "meta_delivery": 0.0}, {"data": "2025-12-04", "mes": "2025-12", "dia_semana": "Qui", "fat_total": 16208.99, "serv_tx": 1235.73, "fat_real": 16208.99, "pessoas": 161, "ticket_medio": 108.35, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 17444.72, "meta_salao": 17444.72, "meta_delivery": 0.0}, {"data": "2025-12-05", "mes": "2025-12", "dia_semana": "Sex", "fat_total": 26310.94, "serv_tx": 1998.74, "fat_real": 26310.94, "pessoas": 273, "ticket_medio": 103.7, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 28309.68, "meta_salao": 28309.68, "meta_delivery": 0.0}, {"data": "2025-12-06", "mes": "2025-12", "dia_semana": "Sáb", "fat_total": 32972.14, "serv_tx": 2556.67, "fat_real": 32972.14, "pessoas": 363, "ticket_medio": 97.88, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 35528.81, "meta_salao": 35528.81, "meta_delivery": 0.0}, {"data": "2025-12-07", "mes": "2025-12", "dia_semana": "Dom", "fat_total": 45233.77, "serv_tx": 3528.88, "fat_real": 45233.77, "pessoas": 429, "ticket_medio": 113.67, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 48762.65, "meta_salao": 48762.65, "meta_delivery": 0.0}, {"data": "2025-12-08", "mes": "2025-12", "dia_semana": "Seg", "fat_total": 29825.87, "serv_tx": 2398.91, "fat_real": 29825.87, "pessoas": 321, "ticket_medio": 100.39, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 32224.78, "meta_salao": 32224.78, "meta_delivery": 0.0}, {"data": "2025-12-09", "mes": "2025-12", "dia_semana": "Ter", "fat_total": 10457.42, "serv_tx": 728.1, "fat_real": 10457.42, "pessoas": 121, "ticket_medio": 92.44, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11185.52, "meta_salao": 11185.52, "meta_delivery": 0.0}, {"data": "2025-12-10", "mes": "2025-12", "dia_semana": "Qua", "fat_total": 15568.7, "serv_tx": 1192.48, "fat_real": 15568.7, "pessoas": 160, "ticket_medio": 104.76, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 16761.18, "meta_salao": 16761.18, "meta_delivery": 0.0}, {"data": "2025-12-11", "mes": "2025-12", "dia_semana": "Qui", "fat_total": 19718.44, "serv_tx": 1556.4, "fat_real": 19718.44, "pessoas": 205, "ticket_medio": 103.78, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 21274.84, "meta_salao": 21274.84, "meta_delivery": 0.0}, {"data": "2025-12-12", "mes": "2025-12", "dia_semana": "Sex", "fat_total": 33302.25, "serv_tx": 2249.68, "fat_real": 33302.25, "pessoas": 343, "ticket_medio": 103.65, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 35551.93, "meta_salao": 35551.93, "meta_delivery": 0.0}, {"data": "2025-12-13", "mes": "2025-12", "dia_semana": "Sáb", "fat_total": 36937.05, "serv_tx": 3173.48, "fat_real": 36937.05, "pessoas": 392, "ticket_medio": 102.32, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 40110.53, "meta_salao": 40110.53, "meta_delivery": 0.0}, {"data": "2025-12-14", "mes": "2025-12", "dia_semana": "Dom", "fat_total": 50825.24, "serv_tx": 3914.33, "fat_real": 50825.24, "pessoas": 510, "ticket_medio": 107.33, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 54739.57, "meta_salao": 54739.57, "meta_delivery": 0.0}, {"data": "2025-12-15", "mes": "2025-12", "dia_semana": "Seg", "fat_total": 25499.01, "serv_tx": 1370.71, "fat_real": 25499.01, "pessoas": 227, "ticket_medio": 118.37, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 26869.72, "meta_salao": 26869.72, "meta_delivery": 0.0}, {"data": "2025-12-16", "mes": "2025-12", "dia_semana": "Ter", "fat_total": 11316.16, "serv_tx": 668.71, "fat_real": 11316.16, "pessoas": 109, "ticket_medio": 109.95, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11984.87, "meta_salao": 11984.87, "meta_delivery": 0.0}, {"data": "2025-12-17", "mes": "2025-12", "dia_semana": "Qua", "fat_total": 24920.37, "serv_tx": 1934.72, "fat_real": 24920.37, "pessoas": 256, "ticket_medio": 104.9, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 26855.09, "meta_salao": 26855.09, "meta_delivery": 0.0}, {"data": "2025-12-18", "mes": "2025-12", "dia_semana": "Qui", "fat_total": 21810.97, "serv_tx": 1745.66, "fat_real": 21810.97, "pessoas": 270, "ticket_medio": 87.25, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 23556.63, "meta_salao": 23556.63, "meta_delivery": 0.0}, {"data": "2025-12-19", "mes": "2025-12", "dia_semana": "Sex", "fat_total": 30182.26, "serv_tx": 2283.71, "fat_real": 30182.26, "pessoas": 335, "ticket_medio": 96.91, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 32465.97, "meta_salao": 32465.97, "meta_delivery": 0.0}, {"data": "2025-12-20", "mes": "2025-12", "dia_semana": "Sáb", "fat_total": 33936.8, "serv_tx": 2805.87, "fat_real": 33936.8, "pessoas": 335, "ticket_medio": 109.68, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 36742.67, "meta_salao": 36742.67, "meta_delivery": 0.0}, {"data": "2025-12-21", "mes": "2025-12", "dia_semana": "Dom", "fat_total": 48160.34, "serv_tx": 3930.73, "fat_real": 48160.34, "pessoas": 472, "ticket_medio": 110.36, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 52091.07, "meta_salao": 52091.07, "meta_delivery": 0.0}, {"data": "2025-12-22", "mes": "2025-12", "dia_semana": "Seg", "fat_total": 18857.31, "serv_tx": 1222.86, "fat_real": 18857.31, "pessoas": 193, "ticket_medio": 104.04, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 20080.17, "meta_salao": 20080.17, "meta_delivery": 0.0}, {"data": "2025-12-23", "mes": "2025-12", "dia_semana": "Ter", "fat_total": 25995.86, "serv_tx": 1902.19, "fat_real": 25995.86, "pessoas": 260, "ticket_medio": 107.3, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 27898.05, "meta_salao": 27898.05, "meta_delivery": 0.0}, {"data": "2025-12-25", "mes": "2025-12", "dia_semana": "Qui", "fat_total": 42081.26, "serv_tx": 3409.25, "fat_real": 42081.26, "pessoas": 453, "ticket_medio": 100.42, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 45490.51, "meta_salao": 45490.51, "meta_delivery": 0.0}, {"data": "2025-12-26", "mes": "2025-12", "dia_semana": "Sex", "fat_total": 19798.5, "serv_tx": 1536.91, "fat_real": 19798.5, "pessoas": 179, "ticket_medio": 119.19, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 21335.41, "meta_salao": 21335.41, "meta_delivery": 0.0}, {"data": "2025-12-27", "mes": "2025-12", "dia_semana": "Sáb", "fat_total": 28521.84, "serv_tx": 2108.83, "fat_real": 28521.84, "pessoas": 295, "ticket_medio": 103.83, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 30630.67, "meta_salao": 30630.67, "meta_delivery": 0.0}, {"data": "2025-12-28", "mes": "2025-12", "dia_semana": "Dom", "fat_total": 45881.48, "serv_tx": 3629.86, "fat_real": 45881.48, "pessoas": 487, "ticket_medio": 101.67, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 49511.34, "meta_salao": 49511.34, "meta_delivery": 0.0}, {"data": "2025-12-29", "mes": "2025-12", "dia_semana": "Seg", "fat_total": 20138.28, "serv_tx": 1106.51, "fat_real": 20138.28, "pessoas": 192, "ticket_medio": 110.65, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 21244.79, "meta_salao": 21244.79, "meta_delivery": 0.0}, {"data": "2025-12-30", "mes": "2025-12", "dia_semana": "Ter", "fat_total": 21644.1, "serv_tx": 1429.03, "fat_real": 21644.1, "pessoas": 231, "ticket_medio": 99.88, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 23073.13, "meta_salao": 23073.13, "meta_delivery": 0.0}, {"data": "2026-01-01", "mes": "2026-01", "dia_semana": "Qui", "fat_total": 38363.96, "serv_tx": 3235.35, "fat_real": 38363.96, "pessoas": 373, "ticket_medio": 111.53, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 38363.85, "meta_salao": 17956.8, "meta_delivery": 20407.05}, {"data": "2026-01-02", "mes": "2026-01", "dia_semana": "Sex", "fat_total": 22838.55, "serv_tx": 1699.45, "fat_real": 22838.55, "pessoas": 222, "ticket_medio": 110.53, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 20000.0, "meta_salao": 12000.0, "meta_delivery": 8000.0}, {"data": "2026-01-03", "mes": "2026-01", "dia_semana": "Sáb", "fat_total": 33817.99, "serv_tx": 2743.46, "fat_real": 33817.99, "pessoas": 348, "ticket_medio": 105.06, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 33000.0, "meta_salao": 20000.0, "meta_delivery": 13000.0}, {"data": "2026-01-04", "mes": "2026-01", "dia_semana": "Dom", "fat_total": 40568.68, "serv_tx": 3313.54, "fat_real": 40568.68, "pessoas": 407, "ticket_medio": 107.82, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 39000.0, "meta_salao": 21000.0, "meta_delivery": 18000.0}, {"data": "2026-01-05", "mes": "2026-01", "dia_semana": "Seg", "fat_total": 12674.24, "serv_tx": 865.87, "fat_real": 12674.24, "pessoas": 113, "ticket_medio": 119.82, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8500.0, "meta_salao": 4500.0, "meta_delivery": 4000.0}, {"data": "2026-01-06", "mes": "2026-01", "dia_semana": "Ter", "fat_total": 10454.49, "serv_tx": 650.6, "fat_real": 10454.49, "pessoas": 113, "ticket_medio": 98.28, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10000.0, "meta_salao": 5000.0, "meta_delivery": 5000.0}, {"data": "2026-01-07", "mes": "2026-01", "dia_semana": "Qua", "fat_total": 14364.96, "serv_tx": 1059.54, "fat_real": 14364.96, "pessoas": 145, "ticket_medio": 106.38, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11500.0, "meta_salao": 6000.0, "meta_delivery": 5500.0}, {"data": "2026-01-08", "mes": "2026-01", "dia_semana": "Qui", "fat_total": 15757.41, "serv_tx": 1230.49, "fat_real": 15757.41, "pessoas": 163, "ticket_medio": 104.22, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13500.0, "meta_salao": 7000.0, "meta_delivery": 6500.0}, {"data": "2026-01-09", "mes": "2026-01", "dia_semana": "Sex", "fat_total": 19225.58, "serv_tx": 1214.85, "fat_real": 19225.58, "pessoas": 183, "ticket_medio": 111.7, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 20000.0, "meta_salao": 12000.0, "meta_delivery": 8000.0}, {"data": "2026-01-10", "mes": "2026-01", "dia_semana": "Sáb", "fat_total": 38074.77, "serv_tx": 2893.75, "fat_real": 38074.77, "pessoas": 373, "ticket_medio": 109.84, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 33000.0, "meta_salao": 20000.0, "meta_delivery": 13000.0}, {"data": "2026-01-11", "mes": "2026-01", "dia_semana": "Dom", "fat_total": 40890.81, "serv_tx": 3061.64, "fat_real": 40890.81, "pessoas": 367, "ticket_medio": 119.76, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 39000.0, "meta_salao": 21000.0, "meta_delivery": 18000.0}, {"data": "2026-01-12", "mes": "2026-01", "dia_semana": "Seg", "fat_total": 11267.04, "serv_tx": 856.7, "fat_real": 11267.04, "pessoas": 116, "ticket_medio": 104.52, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8500.0, "meta_salao": 4500.0, "meta_delivery": 4000.0}, {"data": "2026-01-13", "mes": "2026-01", "dia_semana": "Ter", "fat_total": 9401.44, "serv_tx": 585.38, "fat_real": 9401.44, "pessoas": 94, "ticket_medio": 106.24, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10000.0, "meta_salao": 5000.0, "meta_delivery": 5000.0}, {"data": "2026-01-14", "mes": "2026-01", "dia_semana": "Qua", "fat_total": 10832.64, "serv_tx": 807.24, "fat_real": 10832.64, "pessoas": 104, "ticket_medio": 111.92, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11500.0, "meta_salao": 6000.0, "meta_delivery": 5500.0}, {"data": "2026-01-15", "mes": "2026-01", "dia_semana": "Qui", "fat_total": 12783.84, "serv_tx": 1066.78, "fat_real": 12783.84, "pessoas": 141, "ticket_medio": 98.23, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13500.0, "meta_salao": 7000.0, "meta_delivery": 6500.0}, {"data": "2026-01-16", "mes": "2026-01", "dia_semana": "Sex", "fat_total": 24981.96, "serv_tx": 1824.46, "fat_real": 24981.96, "pessoas": 244, "ticket_medio": 109.86, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 20000.0, "meta_salao": 12000.0, "meta_delivery": 8000.0}, {"data": "2026-01-17", "mes": "2026-01", "dia_semana": "Sáb", "fat_total": 26991.3, "serv_tx": 2049.26, "fat_real": 26991.3, "pessoas": 248, "ticket_medio": 117.1, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 33000.0, "meta_salao": 20000.0, "meta_delivery": 13000.0}, {"data": "2026-01-18", "mes": "2026-01", "dia_semana": "Dom", "fat_total": 41824.21, "serv_tx": 3605.42, "fat_real": 41824.21, "pessoas": 421, "ticket_medio": 107.91, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 39000.0, "meta_salao": 21000.0, "meta_delivery": 18000.0}, {"data": "2026-01-19", "mes": "2026-01", "dia_semana": "Seg", "fat_total": 10807.17, "serv_tx": 793.63, "fat_real": 10807.17, "pessoas": 104, "ticket_medio": 111.55, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8500.0, "meta_salao": 4500.0, "meta_delivery": 4000.0}, {"data": "2026-01-20", "mes": "2026-01", "dia_semana": "Ter", "fat_total": 9894.59, "serv_tx": 558.7, "fat_real": 9894.59, "pessoas": 94, "ticket_medio": 111.21, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10000.0, "meta_salao": 5000.0, "meta_delivery": 5000.0}, {"data": "2026-01-21", "mes": "2026-01", "dia_semana": "Qua", "fat_total": 8949.21, "serv_tx": 647.08, "fat_real": 8949.21, "pessoas": 87, "ticket_medio": 110.3, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11500.0, "meta_salao": 6000.0, "meta_delivery": 5500.0}, {"data": "2026-01-22", "mes": "2026-01", "dia_semana": "Qui", "fat_total": 13400.46, "serv_tx": 1039.08, "fat_real": 13400.46, "pessoas": 141, "ticket_medio": 102.41, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13500.0, "meta_salao": 7000.0, "meta_delivery": 6500.0}, {"data": "2026-01-23", "mes": "2026-01", "dia_semana": "Sex", "fat_total": 23858.9, "serv_tx": 1799.74, "fat_real": 23858.9, "pessoas": 222, "ticket_medio": 115.58, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 20000.0, "meta_salao": 12000.0, "meta_delivery": 8000.0}, {"data": "2026-01-24", "mes": "2026-01", "dia_semana": "Sáb", "fat_total": 27192.41, "serv_tx": 2168.86, "fat_real": 27192.41, "pessoas": 250, "ticket_medio": 117.45, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 33000.0, "meta_salao": 20000.0, "meta_delivery": 13000.0}, {"data": "2026-01-25", "mes": "2026-01", "dia_semana": "Dom", "fat_total": 36077.84, "serv_tx": 3001.86, "fat_real": 36077.84, "pessoas": 323, "ticket_medio": 120.99, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 39000.0, "meta_salao": 21000.0, "meta_delivery": 18000.0}, {"data": "2026-01-26", "mes": "2026-01", "dia_semana": "Seg", "fat_total": 8341.15, "serv_tx": 743.33, "fat_real": 8341.15, "pessoas": 80, "ticket_medio": 113.56, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8500.0, "meta_salao": 4500.0, "meta_delivery": 4000.0}, {"data": "2026-01-27", "mes": "2026-01", "dia_semana": "Ter", "fat_total": 10211.19, "serv_tx": 717.79, "fat_real": 10211.19, "pessoas": 96, "ticket_medio": 113.84, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10000.0, "meta_salao": 5000.0, "meta_delivery": 5000.0}, {"data": "2026-01-28", "mes": "2026-01", "dia_semana": "Qua", "fat_total": 8942.64, "serv_tx": 733.84, "fat_real": 8942.64, "pessoas": 92, "ticket_medio": 105.18, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11500.0, "meta_salao": 6000.0, "meta_delivery": 5500.0}, {"data": "2026-01-29", "mes": "2026-01", "dia_semana": "Qui", "fat_total": 12280.25, "serv_tx": 945.78, "fat_real": 12280.25, "pessoas": 119, "ticket_medio": 111.14, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13500.0, "meta_salao": 7000.0, "meta_delivery": 6500.0}, {"data": "2026-01-30", "mes": "2026-01", "dia_semana": "Sex", "fat_total": 28878.88, "serv_tx": 2309.7, "fat_real": 28878.88, "pessoas": 325, "ticket_medio": 95.96, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 20000.0, "meta_salao": 12000.0, "meta_delivery": 8000.0}, {"data": "2026-01-31", "mes": "2026-01", "dia_semana": "Sáb", "fat_total": 25674.27, "serv_tx": 2143.74, "fat_real": 25674.27, "pessoas": 242, "ticket_medio": 114.95, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 33000.0, "meta_salao": 20000.0, "meta_delivery": 13000.0}, {"data": "2026-02-01", "mes": "2026-02", "dia_semana": "Dom", "fat_total": 36773.26, "serv_tx": 3127.6, "fat_real": 36773.26, "pessoas": 393, "ticket_medio": 101.53, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 36773.26, "meta_salao": 21875.0, "meta_delivery": 14898.26}, {"data": "2026-02-02", "mes": "2026-02", "dia_semana": "Seg", "fat_total": 11076.96, "serv_tx": 748.29, "fat_real": 11076.96, "pessoas": 111, "ticket_medio": 106.53, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11060.21, "meta_salao": 7160.65, "meta_delivery": 3899.56}, {"data": "2026-02-03", "mes": "2026-02", "dia_semana": "Ter", "fat_total": 9609.48, "serv_tx": 688.84, "fat_real": 9609.48, "pessoas": 96, "ticket_medio": 107.27, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 9609.48, "meta_salao": 5161.5, "meta_delivery": 4447.98}, {"data": "2026-02-04", "mes": "2026-02", "dia_semana": "Qua", "fat_total": 8608.82, "serv_tx": 756.95, "fat_real": 8608.82, "pessoas": 83, "ticket_medio": 112.84, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10500.0, "meta_salao": 6000.0, "meta_delivery": 4500.0}, {"data": "2026-02-05", "mes": "2026-02", "dia_semana": "Qui", "fat_total": 7781.22, "serv_tx": 609.38, "fat_real": 7781.22, "pessoas": 67, "ticket_medio": 125.23, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12500.0, "meta_salao": 7000.0, "meta_delivery": 5500.0}, {"data": "2026-02-06", "mes": "2026-02", "dia_semana": "Sex", "fat_total": 16761.04, "serv_tx": 1403.14, "fat_real": 16761.04, "pessoas": 157, "ticket_medio": 115.7, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 19000.0, "meta_salao": 11000.0, "meta_delivery": 8000.0}, {"data": "2026-02-07", "mes": "2026-02", "dia_semana": "Sáb", "fat_total": 36956.16, "serv_tx": 3288.8, "fat_real": 36956.16, "pessoas": 382, "ticket_medio": 105.35, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 34000.0, "meta_salao": 20000.0, "meta_delivery": 14000.0}, {"data": "2026-02-08", "mes": "2026-02", "dia_semana": "Dom", "fat_total": 30970.63, "serv_tx": 2762.93, "fat_real": 30970.63, "pessoas": 278, "ticket_medio": 121.34, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 39000.0, "meta_salao": 21000.0, "meta_delivery": 18000.0}, {"data": "2026-02-09", "mes": "2026-02", "dia_semana": "Seg", "fat_total": 8185.49, "serv_tx": 616.01, "fat_real": 8185.49, "pessoas": 81, "ticket_medio": 108.66, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8800.0, "meta_salao": 5000.0, "meta_delivery": 3800.0}, {"data": "2026-02-10", "mes": "2026-02", "dia_semana": "Ter", "fat_total": 11687.94, "serv_tx": 842.38, "fat_real": 11687.94, "pessoas": 111, "ticket_medio": 112.89, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10500.0, "meta_salao": 6000.0, "meta_delivery": 4500.0}, {"data": "2026-02-11", "mes": "2026-02", "dia_semana": "Qua", "fat_total": 9533.02, "serv_tx": 807.45, "fat_real": 9533.02, "pessoas": 93, "ticket_medio": 111.19, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10500.0, "meta_salao": 6000.0, "meta_delivery": 4500.0}, {"data": "2026-02-12", "mes": "2026-02", "dia_semana": "Qui", "fat_total": 10361.9, "serv_tx": 1059.18, "fat_real": 10361.9, "pessoas": 119, "ticket_medio": 95.98, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12500.0, "meta_salao": 7000.0, "meta_delivery": 5500.0}, {"data": "2026-02-13", "mes": "2026-02", "dia_semana": "Sex", "fat_total": 20432.71, "serv_tx": 1789.13, "fat_real": 20432.71, "pessoas": 201, "ticket_medio": 110.56, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 23000.0, "meta_salao": 14000.0, "meta_delivery": 9000.0}, {"data": "2026-02-14", "mes": "2026-02", "dia_semana": "Sáb", "fat_total": 30312.86, "serv_tx": 2698.43, "fat_real": 30312.86, "pessoas": 322, "ticket_medio": 102.52, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 37000.0, "meta_salao": 22000.0, "meta_delivery": 15000.0}, {"data": "2026-02-15", "mes": "2026-02", "dia_semana": "Dom", "fat_total": 42069.1, "serv_tx": 3636.7, "fat_real": 42069.1, "pessoas": 397, "ticket_medio": 115.13, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 56000.0, "meta_salao": 33000.0, "meta_delivery": 23000.0}, {"data": "2026-02-16", "mes": "2026-02", "dia_semana": "Seg", "fat_total": 21707.63, "serv_tx": 1861.17, "fat_real": 21707.63, "pessoas": 191, "ticket_medio": 123.4, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 20000.0, "meta_salao": 8000.0, "meta_delivery": 12000.0}, {"data": "2026-02-17", "mes": "2026-02", "dia_semana": "Ter", "fat_total": 20317.97, "serv_tx": 1826.67, "fat_real": 20317.97, "pessoas": 181, "ticket_medio": 122.35, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 23000.0, "meta_salao": 9000.0, "meta_delivery": 14000.0}, {"data": "2026-02-18", "mes": "2026-02", "dia_semana": "Qua", "fat_total": 13128.61, "serv_tx": 1110.12, "fat_real": 13128.61, "pessoas": 110, "ticket_medio": 129.44, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11800.0, "meta_salao": 7000.0, "meta_delivery": 4800.0}, {"data": "2026-02-19", "mes": "2026-02", "dia_semana": "Qui", "fat_total": 9218.52, "serv_tx": 754.73, "fat_real": 9218.52, "pessoas": 84, "ticket_medio": 118.73, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12500.0, "meta_salao": 7000.0, "meta_delivery": 5500.0}, {"data": "2026-02-20", "mes": "2026-02", "dia_semana": "Sex", "fat_total": 27456.8, "serv_tx": 2455.13, "fat_real": 27456.8, "pessoas": 266, "ticket_medio": 112.45, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 19000.0, "meta_salao": 11000.0, "meta_delivery": 8000.0}, {"data": "2026-02-21", "mes": "2026-02", "dia_semana": "Sáb", "fat_total": 32524.39, "serv_tx": 2664.93, "fat_real": 32524.39, "pessoas": 327, "ticket_medio": 107.61, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 34000.0, "meta_salao": 20000.0, "meta_delivery": 14000.0}, {"data": "2026-02-22", "mes": "2026-02", "dia_semana": "Dom", "fat_total": 34983.19, "serv_tx": 3240.12, "fat_real": 34983.19, "pessoas": 340, "ticket_medio": 112.42, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 39000.0, "meta_salao": 21000.0, "meta_delivery": 18000.0}, {"data": "2026-02-23", "mes": "2026-02", "dia_semana": "Seg", "fat_total": 5548.02, "serv_tx": 413.24, "fat_real": 5548.02, "pessoas": 41, "ticket_medio": 145.4, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8800.0, "meta_salao": 5000.0, "meta_delivery": 3800.0}, {"data": "2026-02-24", "mes": "2026-02", "dia_semana": "Ter", "fat_total": 6287.52, "serv_tx": 600.72, "fat_real": 6287.52, "pessoas": 63, "ticket_medio": 109.34, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10500.0, "meta_salao": 6000.0, "meta_delivery": 4500.0}, {"data": "2026-02-25", "mes": "2026-02", "dia_semana": "Qua", "fat_total": 10464.83, "serv_tx": 962.61, "fat_real": 10464.83, "pessoas": 131, "ticket_medio": 87.23, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 10500.0, "meta_salao": 6000.0, "meta_delivery": 4500.0}, {"data": "2026-02-26", "mes": "2026-02", "dia_semana": "Qui", "fat_total": 9310.18, "serv_tx": 750.31, "fat_real": 9310.18, "pessoas": 89, "ticket_medio": 113.04, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12500.0, "meta_salao": 7000.0, "meta_delivery": 5500.0}, {"data": "2026-02-27", "mes": "2026-02", "dia_semana": "Sex", "fat_total": 21613.65, "serv_tx": 1880.35, "fat_real": 21613.65, "pessoas": 214, "ticket_medio": 109.79, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 19000.0, "meta_salao": 11000.0, "meta_delivery": 8000.0}, {"data": "2026-02-28", "mes": "2026-02", "dia_semana": "Sáb", "fat_total": 38023.87, "serv_tx": 3538.04, "fat_real": 38023.87, "pessoas": 386, "ticket_medio": 107.67, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 34000.0, "meta_salao": 20000.0, "meta_delivery": 14000.0}, {"data": "2026-03-01", "mes": "2026-03", "dia_semana": "Dom", "fat_total": 38790.35, "serv_tx": 3131.51, "fat_real": 38790.35, "pessoas": 377, "ticket_medio": 111.2, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 38000.0, "meta_salao": 20000.0, "meta_delivery": 18000.0}, {"data": "2026-03-02", "mes": "2026-03", "dia_semana": "Seg", "fat_total": 7235.29, "serv_tx": 524.37, "fat_real": 7235.29, "pessoas": 61, "ticket_medio": 127.21, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11000.0, "meta_salao": 6000.0, "meta_delivery": 5000.0}, {"data": "2026-03-03", "mes": "2026-03", "dia_semana": "Ter", "fat_total": 7233.5, "serv_tx": 534.62, "fat_real": 7233.5, "pessoas": 61, "ticket_medio": 127.35, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12000.0, "meta_salao": 6000.0, "meta_delivery": 6000.0}, {"data": "2026-03-04", "mes": "2026-03", "dia_semana": "Qua", "fat_total": 8884.62, "serv_tx": 744.78, "fat_real": 8884.62, "pessoas": 109, "ticket_medio": 88.34, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12000.0, "meta_salao": 6000.0, "meta_delivery": 6000.0}, {"data": "2026-03-05", "mes": "2026-03", "dia_semana": "Qui", "fat_total": 11638.71, "serv_tx": 1019.94, "fat_real": 11638.71, "pessoas": 137, "ticket_medio": 92.4, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13000.0, "meta_salao": 7000.0, "meta_delivery": 6000.0}, {"data": "2026-03-06", "mes": "2026-03", "dia_semana": "Sex", "fat_total": 20160.4, "serv_tx": 1770.91, "fat_real": 20160.4, "pessoas": 201, "ticket_medio": 109.11, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 22000.0, "meta_salao": 13000.0, "meta_delivery": 9000.0}, {"data": "2026-03-07", "mes": "2026-03", "dia_semana": "Sáb", "fat_total": 33093.28, "serv_tx": 2891.01, "fat_real": 33093.28, "pessoas": 330, "ticket_medio": 109.04, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 37000.0, "meta_salao": 23000.0, "meta_delivery": 14000.0}, {"data": "2026-03-08", "mes": "2026-03", "dia_semana": "Dom", "fat_total": 42153.73, "serv_tx": 3524.87, "fat_real": 42153.73, "pessoas": 407, "ticket_medio": 112.23, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 38000.0, "meta_salao": 20000.0, "meta_delivery": 18000.0}, {"data": "2026-03-10", "mes": "2026-03", "dia_semana": "Ter", "fat_total": 10724.92, "serv_tx": 1063.17, "fat_real": 10724.92, "pessoas": 101, "ticket_medio": 116.71, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12000.0, "meta_salao": 6000.0, "meta_delivery": 6000.0}, {"data": "2026-03-11", "mes": "2026-03", "dia_semana": "Qua", "fat_total": 8020.72, "serv_tx": 687.78, "fat_real": 8020.72, "pessoas": 74, "ticket_medio": 117.68, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12000.0, "meta_salao": 6000.0, "meta_delivery": 6000.0}, {"data": "2026-03-12", "mes": "2026-03", "dia_semana": "Qui", "fat_total": 14371.85, "serv_tx": 1329.32, "fat_real": 14371.85, "pessoas": 143, "ticket_medio": 109.8, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13000.0, "meta_salao": 7000.0, "meta_delivery": 6000.0}, {"data": "2026-03-13", "mes": "2026-03", "dia_semana": "Sex", "fat_total": 22547.72, "serv_tx": 2010.51, "fat_real": 22547.72, "pessoas": 230, "ticket_medio": 106.77, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 22000.0, "meta_salao": 13000.0, "meta_delivery": 9000.0}, {"data": "2026-03-14", "mes": "2026-03", "dia_semana": "Sáb", "fat_total": 32296.2, "serv_tx": 2893.36, "fat_real": 32296.2, "pessoas": 338, "ticket_medio": 104.11, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 37000.0, "meta_salao": 23000.0, "meta_delivery": 14000.0}, {"data": "2026-03-15", "mes": "2026-03", "dia_semana": "Dom", "fat_total": 38962.99, "serv_tx": 3320.53, "fat_real": 38962.99, "pessoas": 353, "ticket_medio": 119.78, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 38000.0, "meta_salao": 20000.0, "meta_delivery": 18000.0}, {"data": "2026-03-16", "mes": "2026-03", "dia_semana": "Seg", "fat_total": 6388.29, "serv_tx": 532.12, "fat_real": 6388.29, "pessoas": 54, "ticket_medio": 128.16, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11000.0, "meta_salao": 6000.0, "meta_delivery": 5000.0}, {"data": "2026-03-17", "mes": "2026-03", "dia_semana": "Ter", "fat_total": 5296.96, "serv_tx": 501.75, "fat_real": 5296.96, "pessoas": 55, "ticket_medio": 105.43, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12000.0, "meta_salao": 6000.0, "meta_delivery": 6000.0}, {"data": "2026-03-18", "mes": "2026-03", "dia_semana": "Qua", "fat_total": 9555.23, "serv_tx": 923.39, "fat_real": 9555.23, "pessoas": 82, "ticket_medio": 127.79, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12000.0, "meta_salao": 6000.0, "meta_delivery": 6000.0}, {"data": "2026-03-19", "mes": "2026-03", "dia_semana": "Qui", "fat_total": 11958.73, "serv_tx": 1060.86, "fat_real": 11958.73, "pessoas": 132, "ticket_medio": 98.63, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13000.0, "meta_salao": 7000.0, "meta_delivery": 6000.0}, {"data": "2026-03-20", "mes": "2026-03", "dia_semana": "Sex", "fat_total": 28528.58, "serv_tx": 2424.81, "fat_real": 28528.58, "pessoas": 262, "ticket_medio": 118.14, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 22000.0, "meta_salao": 13000.0, "meta_delivery": 9000.0}, {"data": "2026-03-21", "mes": "2026-03", "dia_semana": "Sáb", "fat_total": 35636.98, "serv_tx": 3123.74, "fat_real": 35636.98, "pessoas": 326, "ticket_medio": 118.9, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 37000.0, "meta_salao": 23000.0, "meta_delivery": 14000.0}, {"data": "2026-03-22", "mes": "2026-03", "dia_semana": "Dom", "fat_total": 32943.71, "serv_tx": 2849.91, "fat_real": 32943.71, "pessoas": 284, "ticket_medio": 126.03, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 38000.0, "meta_salao": 20000.0, "meta_delivery": 18000.0}, {"data": "2026-03-23", "mes": "2026-03", "dia_semana": "Seg", "fat_total": 9583.17, "serv_tx": 832.03, "fat_real": 9583.17, "pessoas": 100, "ticket_medio": 104.15, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 11000.0, "meta_salao": 6000.0, "meta_delivery": 5000.0}, {"data": "2026-03-24", "mes": "2026-03", "dia_semana": "Ter", "fat_total": 8517.62, "serv_tx": 849.71, "fat_real": 8517.62, "pessoas": 117, "ticket_medio": 80.06, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12000.0, "meta_salao": 6000.0, "meta_delivery": 6000.0}, {"data": "2026-03-25", "mes": "2026-03", "dia_semana": "Qua", "fat_total": 9206.5, "serv_tx": 908.2, "fat_real": 9206.5, "pessoas": 94, "ticket_medio": 107.6, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12000.0, "meta_salao": 6000.0, "meta_delivery": 6000.0}, {"data": "2026-03-26", "mes": "2026-03", "dia_semana": "Qui", "fat_total": 8008.34, "serv_tx": 806.71, "fat_real": 8008.34, "pessoas": 92, "ticket_medio": 95.82, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13000.0, "meta_salao": 7000.0, "meta_delivery": 6000.0}, {"data": "2026-03-27", "mes": "2026-03", "dia_semana": "Sex", "fat_total": 21713.44, "serv_tx": 1839.25, "fat_real": 21713.44, "pessoas": 211, "ticket_medio": 111.62, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 22000.0, "meta_salao": 13000.0, "meta_delivery": 9000.0}, {"data": "2026-03-28", "mes": "2026-03", "dia_semana": "Sáb", "fat_total": 24565.82, "serv_tx": 2234.97, "fat_real": 24565.82, "pessoas": 232, "ticket_medio": 115.52, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 37000.0, "meta_salao": 23000.0, "meta_delivery": 14000.0}, {"data": "2026-03-29", "mes": "2026-03", "dia_semana": "Dom", "fat_total": 45251.98, "serv_tx": 3972.62, "fat_real": 45251.98, "pessoas": 429, "ticket_medio": 114.74, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 0.0, "meta_salao": 20000.0, "meta_delivery": 18000.0}, {"data": "2026-03-30", "mes": "2026-03", "dia_semana": "Seg", "fat_total": 4953.16, "serv_tx": 515.92, "fat_real": 4953.16, "pessoas": 51, "ticket_medio": 107.24, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 0.0, "meta_salao": 6000.0, "meta_delivery": 5000.0}, {"data": "2026-03-31", "mes": "2026-03", "dia_semana": "Ter", "fat_total": 8411.21, "serv_tx": 636.83, "fat_real": 8411.21, "pessoas": 66, "ticket_medio": 137.09, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 0.0, "meta_salao": 6000.0, "meta_delivery": 6000.0}, {"data": "2026-04-01", "mes": "2026-04", "dia_semana": "Qua", "fat_total": 12975.09, "serv_tx": 1155.07, "fat_real": 12975.09, "pessoas": 113, "ticket_medio": 125.05, "fat_salao": 6704.49, "fat_delivery": 6270.6, "meta_total": 13100.0, "meta_salao": 7000.0, "meta_delivery": 6100.0}, {"data": "2026-04-02", "mes": "2026-04", "dia_semana": "Qui", "fat_total": 23681.32, "serv_tx": 2118.13, "fat_real": 23681.32, "pessoas": 240, "ticket_medio": 107.5, "fat_salao": 15393.4, "fat_delivery": 8287.92, "meta_total": 15000.0, "meta_salao": 7000.0, "meta_delivery": 8000.0}, {"data": "2026-04-03", "mes": "2026-04", "dia_semana": "Sex", "fat_total": 26738.85, "serv_tx": 2445.32, "fat_real": 26738.85, "pessoas": 265, "ticket_medio": 110.13, "fat_salao": 14425.6, "fat_delivery": 12313.25, "meta_total": 26000.0, "meta_salao": 14000.0, "meta_delivery": 12000.0}, {"data": "2026-04-04", "mes": "2026-04", "dia_semana": "Sáb", "fat_total": 28877.58, "serv_tx": 2516.23, "fat_real": 28877.58, "pessoas": 287, "ticket_medio": 109.39, "fat_salao": 15909.7, "fat_delivery": 12687.88, "meta_total": 33000.0, "meta_salao": 20000.0, "meta_delivery": 13000.0}, {"data": "2026-04-05", "mes": "2026-04", "dia_semana": "Dom", "fat_total": 36127.79, "serv_tx": 2882.86, "fat_real": 36127.79, "pessoas": 360, "ticket_medio": 108.36, "fat_salao": 19523.65, "fat_delivery": 16604.14, "meta_total": 41000.0, "meta_salao": 20000.0, "meta_delivery": 21000.0}, {"data": "2026-04-06", "mes": "2026-04", "dia_semana": "Seg", "fat_total": 5725.58, "serv_tx": 560.52, "fat_real": 5725.58, "pessoas": 69, "ticket_medio": 91.1, "fat_salao": 3105.5, "fat_delivery": 2620.08, "meta_total": 7100.0, "meta_salao": 4000.0, "meta_delivery": 3100.0}, {"data": "2026-04-07", "mes": "2026-04", "dia_semana": "Ter", "fat_total": 6470.88, "serv_tx": 557.96, "fat_real": 6470.88, "pessoas": 58, "ticket_medio": 121.19, "fat_salao": 2960.4, "fat_delivery": 3510.48, "meta_total": 7500.0, "meta_salao": 4000.0, "meta_delivery": 3500.0}, {"data": "2026-04-08", "mes": "2026-04", "dia_semana": "Qua", "fat_total": 12272.52, "serv_tx": 885.81, "fat_real": 12272.52, "pessoas": 118, "ticket_medio": 111.51, "fat_salao": 8683.02, "fat_delivery": 3589.5, "meta_total": 10500.0, "meta_salao": 7000.0, "meta_delivery": 3500.0}, {"data": "2026-04-09", "mes": "2026-04", "dia_semana": "Qui", "fat_total": 7623.25, "serv_tx": 792.09, "fat_real": 7623.25, "pessoas": 88, "ticket_medio": 95.63, "fat_salao": 4547.5, "fat_delivery": 3075.75, "meta_total": 11000.0, "meta_salao": 7000.0, "meta_delivery": 4000.0}, {"data": "2026-04-10", "mes": "2026-04", "dia_semana": "Sex", "fat_total": 24504.98, "serv_tx": 2077.45, "fat_real": 24504.98, "pessoas": 221, "ticket_medio": 120.28, "fat_salao": 13843.0, "fat_delivery": 10444.98, "meta_total": 24500.0, "meta_salao": 14000.0, "meta_delivery": 10500.0}, {"data": "2026-04-11", "mes": "2026-04", "dia_semana": "Sáb", "fat_total": 31389.07, "serv_tx": 2822.85, "fat_real": 31389.07, "pessoas": 324, "ticket_medio": 105.59, "fat_salao": 20200.23, "fat_delivery": 11188.84, "meta_total": 33000.0, "meta_salao": 20000.0, "meta_delivery": 13000.0}, {"data": "2026-04-12", "mes": "2026-04", "dia_semana": "Dom", "fat_total": 42139.55, "serv_tx": 3631.77, "fat_real": 42139.55, "pessoas": 394, "ticket_medio": 116.17, "fat_salao": 20184.2, "fat_delivery": 21955.35, "meta_total": 41000.0, "meta_salao": 20000.0, "meta_delivery": 21000.0}, {"data": "2026-04-13", "mes": "2026-04", "dia_semana": "Seg", "fat_total": 8511.29, "serv_tx": 621.83, "fat_real": 8511.29, "pessoas": 89, "ticket_medio": 102.62, "fat_salao": 5026.0, "fat_delivery": 3485.29, "meta_total": 7100.0, "meta_salao": 4000.0, "meta_delivery": 3100.0}, {"data": "2026-04-14", "mes": "2026-04", "dia_semana": "Ter", "fat_total": 9598.56, "serv_tx": 888.53, "fat_real": 9598.56, "pessoas": 102, "ticket_medio": 102.81, "fat_salao": 5550.5, "fat_delivery": 4048.06, "meta_total": 7500.0, "meta_salao": 4000.0, "meta_delivery": 3500.0}, {"data": "2026-04-15", "mes": "2026-04", "dia_semana": "Qua", "fat_total": 6346.15, "serv_tx": 566.27, "fat_real": 6346.15, "pessoas": 69, "ticket_medio": 100.18, "fat_salao": 3185.5, "fat_delivery": 3160.65, "meta_total": 10500.0, "meta_salao": 7000.0, "meta_delivery": 3500.0}, {"data": "2026-04-16", "mes": "2026-04", "dia_semana": "Qui", "fat_total": 11125.85, "serv_tx": 1024.51, "fat_real": 11125.85, "pessoas": 111, "ticket_medio": 109.46, "fat_salao": 6445.75, "fat_delivery": 4680.1, "meta_total": 11000.0, "meta_salao": 7000.0, "meta_delivery": 4000.0}, {"data": "2026-04-17", "mes": "2026-04", "dia_semana": "Sex", "fat_total": 23403.61, "serv_tx": 2018.13, "fat_real": 23403.61, "pessoas": 220, "ticket_medio": 115.55, "fat_salao": 12313.8, "fat_delivery": 10914.81, "meta_total": 24500.0, "meta_salao": 14000.0, "meta_delivery": 10500.0}, {"data": "2026-04-18", "mes": "2026-04", "dia_semana": "Sáb", "fat_total": 26029.2, "serv_tx": 2393.53, "fat_real": 26029.2, "pessoas": 256, "ticket_medio": 111.03, "fat_salao": 13644.5, "fat_delivery": 12384.7, "meta_total": 33000.0, "meta_salao": 20000.0, "meta_delivery": 13000.0}, {"data": "2026-04-19", "mes": "2026-04", "dia_semana": "Dom", "fat_total": 34291.07, "serv_tx": 2844.34, "fat_real": 34291.07, "pessoas": 309, "ticket_medio": 120.18, "fat_salao": 16111.0, "fat_delivery": 18180.07, "meta_total": 41000.0, "meta_salao": 20000.0, "meta_delivery": 21000.0}, {"data": "2026-04-20", "mes": "2026-04", "dia_semana": "Seg", "fat_total": 19152.61, "serv_tx": 1654.84, "fat_real": 19152.61, "pessoas": 175, "ticket_medio": 118.9, "fat_salao": 10734.4, "fat_delivery": 8418.21, "meta_total": 7100.0, "meta_salao": 4000.0, "meta_delivery": 3100.0}, {"data": "2026-04-21", "mes": "2026-04", "dia_semana": "Ter", "fat_total": 25725.29, "serv_tx": 2523.17, "fat_real": 25725.29, "pessoas": 230, "ticket_medio": 122.82, "fat_salao": 14580.0, "fat_delivery": 11145.29, "meta_total": 8500.0, "meta_salao": 5000.0, "meta_delivery": 3500.0}, {"data": "2026-04-22", "mes": "2026-04", "dia_semana": "Qua", "fat_total": 12959.35, "serv_tx": 1186.66, "fat_real": 12959.35, "pessoas": 127, "ticket_medio": 111.39, "fat_salao": 8117.8, "fat_delivery": 4841.55, "meta_total": 12950.0, "meta_salao": 9450.0, "meta_delivery": 3500.0}, {"data": "2026-04-23", "mes": "2026-04", "dia_semana": "Qui", "fat_total": 15854.93, "serv_tx": 1463.34, "fat_real": 15854.93, "pessoas": 140, "ticket_medio": 123.7, "fat_salao": 11571.2, "fat_delivery": 4283.73, "meta_total": 13450.0, "meta_salao": 9450.0, "meta_delivery": 4000.0}, {"data": "2026-04-24", "mes": "2026-04", "dia_semana": "Sex", "fat_total": 30114.88, "serv_tx": 2454.47, "fat_real": 30114.88, "pessoas": 257, "ticket_medio": 126.73, "fat_salao": 19730.69, "fat_delivery": 10384.19, "meta_total": 29400.0, "meta_salao": 18900.0, "meta_delivery": 10500.0}, {"data": "2026-04-25", "mes": "2026-04", "dia_semana": "Sáb", "fat_total": 41523.13, "serv_tx": 3673.71, "fat_real": 41523.13, "pessoas": 371, "ticket_medio": 121.82, "fat_salao": 29155.89, "fat_delivery": 12367.24, "meta_total": 40000.0, "meta_salao": 27000.0, "meta_delivery": 13000.0}, {"data": "2026-04-26", "mes": "2026-04", "dia_semana": "Dom", "fat_total": 42485.64, "serv_tx": 3680.58, "fat_real": 42485.64, "pessoas": 430, "ticket_medio": 107.36, "fat_salao": 24842.28, "fat_delivery": 17643.36, "meta_total": 48000.0, "meta_salao": 27000.0, "meta_delivery": 21000.0}, {"data": "2026-04-27", "mes": "2026-04", "dia_semana": "Seg", "fat_total": 10620.48, "serv_tx": 879.88, "fat_real": 10620.48, "pessoas": 107, "ticket_medio": 107.48, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8300.0, "meta_salao": 5200.0, "meta_delivery": 3100.0}, {"data": "2026-04-28", "mes": "2026-04", "dia_semana": "Ter", "fat_total": 9669.9, "serv_tx": 818.6, "fat_real": 9669.9, "pessoas": 96, "ticket_medio": 109.26, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 8700.0, "meta_salao": 5200.0, "meta_delivery": 3500.0}, {"data": "2026-04-29", "mes": "2026-04", "dia_semana": "Qua", "fat_total": 14666.75, "serv_tx": 1401.55, "fat_real": 14666.75, "pessoas": 166, "ticket_medio": 96.8, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 12950.0, "meta_salao": 9450.0, "meta_delivery": 3500.0}, {"data": "2026-04-30", "mes": "2026-04", "dia_semana": "Qui", "fat_total": 22546.28, "serv_tx": 1930.67, "fat_real": 22546.28, "pessoas": 213, "ticket_medio": 114.92, "fat_salao": 0.0, "fat_delivery": 0.0, "meta_total": 13450.0, "meta_salao": 9450.0, "meta_delivery": 4000.0}];
-const METAS_MONTHLY=[{"mes": "2025-01", "dias": 31, "fat_total": 624701.94, "serv_tx": 53298.77, "fat_real": 624701.94, "pessoas": 6516, "fat_salao": 354243.38, "fat_delivery": 270458.56, "meta_total": 678000.71, "meta_salao": 0.0, "meta_delivery": 0.0}, {"mes": "2025-02", "dias": 28, "fat_total": 499513.95, "serv_tx": 43261.53, "fat_real": 499513.95, "pessoas": 4979, "fat_salao": 249473.15, "fat_delivery": 250040.8, "meta_total": 542775.48, "meta_salao": 0.0, "meta_delivery": 0.0}, {"mes": "2025-03", "dias": 30, "fat_total": 623536.24, "serv_tx": 46808.04, "fat_real": 623536.24, "pessoas": 6559, "fat_salao": 311883.45, "fat_delivery": 311652.79, "meta_total": 670344.28, "meta_salao": 0.0, "meta_delivery": 0.0}, {"mes": "2025-04", "dias": 30, "fat_total": 583298.92, "serv_tx": 48021.56, "fat_real": 583298.92, "pessoas": 6548, "fat_salao": 316787.26, "fat_delivery": 266511.66, "meta_total": 631320.48, "meta_salao": 0.0, "meta_delivery": 0.0}, {"mes": "2025-05", "dias": 31, "fat_total": 641685.18, "serv_tx": 46673.21, "fat_real": 641685.18, "pessoas": 6853, "fat_salao": 347209.54, "fat_delivery": 294475.64, "meta_total": 688041.39, "meta_salao": 0.0, "meta_delivery": 0.0}, {"mes": "2025-06", "dias": 30, "fat_total": 679158.73, "serv_tx": 45018.22, "fat_real": 679158.73, "pessoas": 7009, "fat_salao": 339348.5, "fat_delivery": 339810.23, "meta_total": 724176.95, "meta_salao": 724176.95, "meta_delivery": 0.0}, {"mes": "2025-07", "dias": 31, "fat_total": 688971.12, "serv_tx": 44067.21, "fat_real": 688971.12, "pessoas": 7193, "fat_salao": 360653.42, "fat_delivery": 328317.7, "meta_total": 733038.33, "meta_salao": 733038.33, "meta_delivery": 0.0}, {"mes": "2025-08", "dias": 31, "fat_total": 719648.86, "serv_tx": 48151.15, "fat_real": 719648.86, "pessoas": 7461, "fat_salao": 376950.97, "fat_delivery": 342697.89, "meta_total": 767800.01, "meta_salao": 767800.01, "meta_delivery": 0.0}, {"mes": "2025-09", "dias": 30, "fat_total": 606959.5, "serv_tx": 47239.13, "fat_real": 606959.5, "pessoas": 6314, "fat_salao": 318500.6, "fat_delivery": 288458.9, "meta_total": 654198.63, "meta_salao": 654198.63, "meta_delivery": 0.0}, {"mes": "2025-10", "dias": 31, "fat_total": 617219.92, "serv_tx": 45673.47, "fat_real": 617219.92, "pessoas": 5871, "fat_salao": 340746.31, "fat_delivery": 276473.61, "meta_total": 662893.39, "meta_salao": 662893.39, "meta_delivery": 0.0}, {"mes": "2025-11", "dias": 30, "fat_total": 673429.05, "serv_tx": 52237.19, "fat_real": 673429.05, "pessoas": 6662, "fat_salao": 367793.08, "fat_delivery": 305635.97, "meta_total": 725666.24, "meta_salao": 725666.24, "meta_delivery": 0.0}, {"mes": "2025-12", "dias": 29, "fat_total": 779328.65, "serv_tx": 58660.65, "fat_real": 779328.65, "pessoas": 8038, "fat_salao": 470508.9, "fat_delivery": 308819.75, "meta_total": 837989.3, "meta_salao": 837989.3, "meta_delivery": 0.0}, {"mes": "2026-01", "dias": 31, "fat_total": 649622.83, "serv_tx": 50366.91, "fat_real": 649622.83, "pessoas": 6350, "fat_salao": 362941.55, "fat_delivery": 286681.28, "meta_total": 633363.85, "meta_salao": 351956.8, "meta_delivery": 281407.05}, {"mes": "2026-02", "dias": 28, "fat_total": 541705.77, "serv_tx": 46893.35, "fat_real": 541705.77, "pessoas": 5314, "fat_salao": 300255.56, "fat_delivery": 241450.21, "meta_total": 585342.95, "meta_salao": 330197.15, "meta_delivery": 255145.8}, {"mes": "2026-03", "dias": 30, "fat_total": 566634.0, "serv_tx": 49459.5, "fat_real": 566634.0, "pessoas": 5509, "fat_salao": 298403.03, "fat_delivery": 268230.97, "meta_total": 569000.0, "meta_salao": 350000.0, "meta_delivery": 280000.0}, {"mes": "2026-04", "dias": 30, "fat_total": 623151.43, "serv_tx": 54470.67, "fat_real": 623151.43, "pessoas": 6005, "fat_salao": 359639.99, "fat_delivery": 263511.44, "meta_total": 600100.0, "meta_salao": 350100.0, "meta_delivery": 250000.0}];
-const METAS_PT={"2025-01": "Jan/25", "2025-02": "Fev/25", "2025-03": "Mar/25", "2025-04": "Abr/25", "2025-05": "Mai/25", "2025-06": "Jun/25", "2025-07": "Jul/25", "2025-08": "Ago/25", "2025-09": "Set/25", "2025-10": "Out/25", "2025-11": "Nov/25", "2025-12": "Dez/25", "2026-01": "Jan/26", "2026-02": "Fev/26", "2026-03": "Mar/26", "2026-04": "Abr/26"};
-const PRODUTOS_HIST=[{"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - PIZZAS GRANDES", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 546.0, "valor": 43838.2}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 68.5, "valor": 8864.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 7.5, "valor": 978.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 20.5, "valor": 3084.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 205.333, "valor": 29577.11}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "STROGON FRANGO FM", "sabor": "STROGON FRANGO", "tamanho": "FM", "qtd": 6.5, "valor": 842.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 34.75, "valor": 5014.25}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 111.5, "valor": 14456.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 9.0, "valor": 1172.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 15.5, "valor": 2029.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 216.167, "valor": 31169.37}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 3.75, "valor": 474.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 39.0, "valor": 5872.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 13.0, "valor": 2135.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 56.333, "valor": 8503.45}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C ATUM FM", "sabor": "CATU C ATUM", "tamanho": "FM", "qtd": 3.5, "valor": 525.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CALABRESA FM", "sabor": "CATU C CALABRESA", "tamanho": "FM", "qtd": 27.5, "valor": 3954.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 118.0, "valor": 17005.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C PRESUNTO FM", "sabor": "CATU C PRESUNTO", "tamanho": "FM", "qtd": 25.0, "valor": 3620.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 48.5, "valor": 6962.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 36.75, "valor": 5286.75}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 92.5, "valor": 13942.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 11.25, "valor": 1693.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C BACON FM", "sabor": "CATU C BACON", "tamanho": "FM", "qtd": 12.75, "valor": 2097.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHAMPIGNON FM", "sabor": "CHAMPIGNON", "tamanho": "FM", "qtd": 1.0, "valor": 151.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 20.75, "valor": 3120.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 18.0, "valor": 2709.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 28.75, "valor": 4349.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 14.75, "valor": 2223.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOMATE SECO FM", "sabor": "TOMATE SECO", "tamanho": "FM", "qtd": 2.5, "valor": 376.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 24.0, "valor": 3954.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 15.5, "valor": 2548.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CREME CAMARAO FM", "sabor": "CREME CAMARAO", "tamanho": "FM", "qtd": 7.5, "valor": 1233.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 5.0, "valor": 821.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 6.25, "valor": 844.25}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 7.75, "valor": 1008.25}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 12.25, "valor": 1581.75}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 38.75, "valor": 5060.25}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 7.0, "valor": 921.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 24.25, "valor": 3138.25}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 3.75, "valor": 483.75}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 3.0, "valor": 387.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ROMEU JULIETA FM", "sabor": "ROMEU JULIETA", "tamanho": "FM", "qtd": 2.833, "valor": 366.95}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 9.834, "valor": 1476.6}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 9.0, "valor": 1483.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 10.0, "valor": 1643.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 30.5, "valor": 5014.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM GR", "sabor": "ATUM", "tamanho": "GR", "qtd": 45.5, "valor": 5744.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C ATUM GR", "sabor": "CATU C ATUM", "tamanho": "GR", "qtd": 4.0, "valor": 506.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C BACON GR", "sabor": "CATU C BACON", "tamanho": "GR", "qtd": 17.0, "valor": 2331.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CALABRESA GR", "sabor": "CATU C CALABRESA", "tamanho": "GR", "qtd": 32.5, "valor": 3849.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 142.5, "valor": 16825.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C PRESUNTO GR", "sabor": "CATU C PRESUNTO", "tamanho": "GR", "qtd": 26.5, "valor": 3155.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 48.0, "valor": 5673.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 273.0, "valor": 32181.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 103.0, "valor": 11350.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 94.5, "valor": 11944.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 345.0, "valor": 26641.27}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 17.0, "valor": 1880.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 7.0, "valor": 763.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHAMPIGNON GR", "sabor": "CHAMPIGNON", "tamanho": "GR", "qtd": 3.0, "valor": 381.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 21.0, "valor": 2656.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 16.5, "valor": 2089.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOMATE SECO GR", "sabor": "TOMATE SECO", "tamanho": "GR", "qtd": 6.0, "valor": 756.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 5.0, "valor": 570.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 16.0, "valor": 2007.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 33.5, "valor": 4232.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 12.5, "valor": 1361.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 4.5, "valor": 615.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 13.0, "valor": 1777.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 29.0, "valor": 3963.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 15.5, "valor": 1975.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 13.0, "valor": 1403.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ROMEU JULIETA GR", "sabor": "ROMEU JULIETA", "tamanho": "GR", "qtd": 1.5, "valor": 159.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 3.5, "valor": 374.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 67.5, "valor": 7376.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 6.5, "valor": 719.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 4.0, "valor": 438.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 28.5, "valor": 3071.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 62.5, "valor": 7869.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 56.5, "valor": 6685.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 40.5, "valor": 4722.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "STROGON FRANGO GR", "sabor": "STROGON FRANGO", "tamanho": "GR", "qtd": 7.5, "valor": 813.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 13.5, "valor": 1493.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 15.0, "valor": 1612.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 13.0, "valor": 1771.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CREME CAMARAO GR", "sabor": "CREME CAMARAO", "tamanho": "GR", "qtd": 4.5, "valor": 612.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUC C/ TOM CEREJA GR", "sabor": "RUC C/ TOM CEREJA", "tamanho": "GR", "qtd": 1.5, "valor": 201.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BROCOLIS GR", "sabor": "BROCOLIS", "tamanho": "GR", "qtd": 1.5, "valor": 201.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM LIGHT GR", "sabor": "ATUM LIGHT", "tamanho": "GR", "qtd": 0.5, "valor": 67.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 41.0, "valor": 5200.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 10.5, "valor": 1333.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 9.5, "valor": 1293.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 9.5, "valor": 1298.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 40.5, "valor": 5545.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "STROGON FRANGO PQ", "sabor": "STROGON FRANGO", "tamanho": "PQ", "qtd": 3.5, "valor": 248.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 11.0, "valor": 867.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C ATUM PQ", "sabor": "CATU C ATUM", "tamanho": "PQ", "qtd": 1.5, "valor": 117.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C BACON PQ", "sabor": "CATU C BACON", "tamanho": "PQ", "qtd": 2.5, "valor": 216.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CALABRESA PQ", "sabor": "CATU C CALABRESA", "tamanho": "PQ", "qtd": 7.5, "valor": 573.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 34.0, "valor": 2617.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C PRESUNTO PQ", "sabor": "CATU C PRESUNTO", "tamanho": "PQ", "qtd": 5.5, "valor": 430.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 17.0, "valor": 1316.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 59.5, "valor": 4573.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 31.0, "valor": 2195.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 17.5, "valor": 1387.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 54.0, "valor": 4156.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 54.5, "valor": 3854.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 7.5, "valor": 528.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 5.0, "valor": 361.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 8.0, "valor": 630.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 5.5, "valor": 432.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOMATE SECO PQ", "sabor": "TOMATE SECO", "tamanho": "PQ", "qtd": 1.5, "valor": 117.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 3.0, "valor": 207.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 3.0, "valor": 235.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 6.5, "valor": 514.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 5.0, "valor": 355.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TACACA PQ", "sabor": "TACACA", "tamanho": "PQ", "qtd": 5.5, "valor": 476.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 7.0, "valor": 611.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 7.5, "valor": 646.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 4.5, "valor": 351.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 47.0, "valor": 3371.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 14.0, "valor": 996.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ROMEU JULIETA PQ", "sabor": "ROMEU JULIETA", "tamanho": "PQ", "qtd": 7.0, "valor": 496.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 10.5, "valor": 744.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 128.5, "valor": 9170.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 4.5, "valor": 321.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 19.5, "valor": 955.67}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "SORVETE PQ", "sabor": "SORVETE", "tamanho": "PQ", "qtd": 2.0, "valor": 156.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 8.5, "valor": 650.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 15.5, "valor": 1218.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 17.5, "valor": 1373.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 21.0, "valor": 1494.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 23.5, "valor": 1672.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 3.5, "valor": 301.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CREME CAMARAO PQ", "sabor": "CREME CAMARAO", "tamanho": "PQ", "qtd": 0.5, "valor": 44.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUC C/ TOM CEREJA PQ", "sabor": "RUC C/ TOM CEREJA", "tamanho": "PQ", "qtd": 2.0, "valor": 185.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM LIGHT PQ", "sabor": "ATUM LIGHT", "tamanho": "PQ", "qtd": 1.0, "valor": 91.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ PROMO", "sabor": "ABACAXI PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ PROMO", "sabor": "BANANA PQ PROMO", "tamanho": "", "qtd": 2.0, "valor": 80.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANC PQ PROMO", "sabor": "CHOCO BRANC PQ PROMO", "tamanho": "", "qtd": 3.0, "valor": 120.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 24.0, "valor": 960.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ROMEU/JULIE PQ PROMO", "sabor": "ROMEU/JULIE PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 9.0, "valor": 714.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 3.5, "valor": 274.5}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 4.0, "valor": 346.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 3.0, "valor": 260.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 15.0, "valor": 1292.0}, {"mes": "2025-01", "periodo": "JAN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALZONE CALABRESA", "sabor": "CALZONE CALABRESA", "tamanho": "", "qtd": 5.0, "valor": 199.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - PIZZAS GRANDES", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 399.0, "valor": 35822.24}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 44.75, "valor": 5905.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 5.5, "valor": 730.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 16.75, "valor": 2531.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 168.75, "valor": 23887.98}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "STROGON FRANGO FM", "sabor": "STROGON FRANGO", "tamanho": "FM", "qtd": 7.25, "valor": 936.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 25.0, "valor": 3613.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 85.0, "valor": 11106.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 8.75, "valor": 1102.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 14.5, "valor": 1899.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 186.5, "valor": 26959.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 5.0, "valor": 656.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 30.0, "valor": 4528.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 5.75, "valor": 946.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 37.5, "valor": 5659.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C ATUM FM", "sabor": "CATU C ATUM", "tamanho": "FM", "qtd": 4.5, "valor": 679.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CALABRESA FM", "sabor": "CATU C CALABRESA", "tamanho": "FM", "qtd": 23.0, "valor": 3312.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 93.25, "valor": 13417.75}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C PRESUNTO FM", "sabor": "CATU C PRESUNTO", "tamanho": "FM", "qtd": 14.25, "valor": 2052.75}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 30.0, "valor": 4311.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 27.25, "valor": 3937.25}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 60.5, "valor": 9122.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 7.5, "valor": 1138.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C BACON FM", "sabor": "CATU C BACON", "tamanho": "FM", "qtd": 8.5, "valor": 1400.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHAMPIGNON FM", "sabor": "CHAMPIGNON", "tamanho": "FM", "qtd": 1.25, "valor": 189.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 17.75, "valor": 2687.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 12.0, "valor": 1810.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 20.5, "valor": 3100.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 10.5, "valor": 1594.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOMATE SECO FM", "sabor": "TOMATE SECO", "tamanho": "FM", "qtd": 2.25, "valor": 340.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 20.75, "valor": 3422.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 13.75, "valor": 2258.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CREME CAMARAO FM", "sabor": "CREME CAMARAO", "tamanho": "FM", "qtd": 4.0, "valor": 659.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 3.5, "valor": 574.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 2.0, "valor": 258.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 2.5, "valor": 322.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 6.0, "valor": 775.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 31.25, "valor": 4115.75}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 5.75, "valor": 760.25}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 14.25, "valor": 1848.25}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 1.75, "valor": 227.25}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 3.0, "valor": 387.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 3.25, "valor": 489.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 5.25, "valor": 862.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 7.0, "valor": 1152.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 18.0, "valor": 2964.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM GR", "sabor": "ATUM", "tamanho": "GR", "qtd": 32.5, "valor": 4097.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C ATUM GR", "sabor": "CATU C ATUM", "tamanho": "GR", "qtd": 7.5, "valor": 949.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C BACON GR", "sabor": "CATU C BACON", "tamanho": "GR", "qtd": 13.0, "valor": 1780.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CALABRESA GR", "sabor": "CATU C CALABRESA", "tamanho": "GR", "qtd": 18.0, "valor": 2129.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 117.5, "valor": 13859.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C PRESUNTO GR", "sabor": "CATU C PRESUNTO", "tamanho": "GR", "qtd": 28.5, "valor": 3386.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 25.0, "valor": 2950.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 248.0, "valor": 29290.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 72.5, "valor": 7981.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 87.0, "valor": 11005.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 277.0, "valor": 21438.19}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 14.0, "valor": 1549.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 6.0, "valor": 447.52}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHAMPIGNON GR", "sabor": "CHAMPIGNON", "tamanho": "GR", "qtd": 4.0, "valor": 503.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 19.5, "valor": 2461.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 18.0, "valor": 2277.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOMATE SECO GR", "sabor": "TOMATE SECO", "tamanho": "GR", "qtd": 6.0, "valor": 770.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 5.0, "valor": 553.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 12.5, "valor": 1577.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 32.5, "valor": 4102.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 15.5, "valor": 1713.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 6.5, "valor": 890.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 16.5, "valor": 2256.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 26.0, "valor": 3554.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 22.0, "valor": 2785.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 9.0, "valor": 1015.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ROMEU JULIETA GR", "sabor": "ROMEU JULIETA", "tamanho": "GR", "qtd": 1.5, "valor": 160.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 4.0, "valor": 427.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 43.0, "valor": 4784.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 6.0, "valor": 639.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 4.0, "valor": 440.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 21.0, "valor": 2313.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 50.0, "valor": 6309.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 44.0, "valor": 5233.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 29.5, "valor": 3483.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "STROGON FRANGO GR", "sabor": "STROGON FRANGO", "tamanho": "GR", "qtd": 7.0, "valor": 766.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 11.5, "valor": 1281.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 8.5, "valor": 923.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 16.0, "valor": 2183.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CREME CAMARAO GR", "sabor": "CREME CAMARAO", "tamanho": "GR", "qtd": 2.5, "valor": 340.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUC C/ TOM CEREJA GR", "sabor": "RUC C/ TOM CEREJA", "tamanho": "GR", "qtd": 1.0, "valor": 134.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM LIGHT GR", "sabor": "ATUM LIGHT", "tamanho": "GR", "qtd": 1.0, "valor": 134.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 27.5, "valor": 3493.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 8.0, "valor": 1021.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 5.0, "valor": 684.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 10.5, "valor": 1434.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 26.0, "valor": 3567.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "STROGON FRANGO PQ", "sabor": "STROGON FRANGO", "tamanho": "PQ", "qtd": 1.5, "valor": 109.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 13.5, "valor": 1081.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C ATUM PQ", "sabor": "CATU C ATUM", "tamanho": "PQ", "qtd": 2.5, "valor": 196.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C BACON PQ", "sabor": "CATU C BACON", "tamanho": "PQ", "qtd": 4.5, "valor": 393.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CALABRESA PQ", "sabor": "CATU C CALABRESA", "tamanho": "PQ", "qtd": 4.5, "valor": 345.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 32.0, "valor": 2478.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C PRESUNTO PQ", "sabor": "CATU C PRESUNTO", "tamanho": "PQ", "qtd": 5.5, "valor": 424.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 18.5, "valor": 1431.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 57.5, "valor": 4441.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 32.5, "valor": 2335.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 17.0, "valor": 1348.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 52.0, "valor": 3978.47}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 45.5, "valor": 3195.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 7.5, "valor": 530.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 4.0, "valor": 288.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 6.5, "valor": 510.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 2.5, "valor": 199.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOMATE SECO PQ", "sabor": "TOMATE SECO", "tamanho": "PQ", "qtd": 2.5, "valor": 199.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 2.0, "valor": 138.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 2.0, "valor": 160.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 8.0, "valor": 625.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 2.5, "valor": 180.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TACACA PQ", "sabor": "TACACA", "tamanho": "PQ", "qtd": 2.5, "valor": 215.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 4.0, "valor": 347.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 9.0, "valor": 780.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 6.5, "valor": 510.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 47.0, "valor": 3348.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 24.5, "valor": 1752.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ROMEU JULIETA PQ", "sabor": "ROMEU JULIETA", "tamanho": "PQ", "qtd": 2.5, "valor": 178.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 4.5, "valor": 322.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 106.0, "valor": 7586.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 8.5, "valor": 602.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 5.0, "valor": 354.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 7.5, "valor": 584.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 10.5, "valor": 822.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 7.0, "valor": 549.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 20.0, "valor": 1433.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 25.5, "valor": 1806.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 1.5, "valor": 130.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CREME CAMARAO PQ", "sabor": "CREME CAMARAO", "tamanho": "PQ", "qtd": 2.0, "valor": 173.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUC C/ TOM CEREJA PQ", "sabor": "RUC C/ TOM CEREJA", "tamanho": "PQ", "qtd": 4.0, "valor": 364.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM LIGHT PQ", "sabor": "ATUM LIGHT", "tamanho": "PQ", "qtd": 0.5, "valor": 45.5}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ PROMO", "sabor": "ABACAXI PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ PROMO", "sabor": "BANANA PQ PROMO", "tamanho": "", "qtd": 2.0, "valor": 80.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANC PQ PROMO", "sabor": "CHOCO BRANC PQ PROMO", "tamanho": "", "qtd": 4.0, "valor": 160.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 33.0, "valor": 1320.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 12.0, "valor": 952.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 3.0, "valor": 237.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 3.5, "valor": 303.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 2.0, "valor": 178.0}, {"mes": "2025-02", "periodo": "FEV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 16.5, "valor": 1433.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - PIZZAS GRANDES", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 430.5, "valor": 29296.82}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 83.75, "valor": 9819.25}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 6.0, "valor": 776.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 21.25, "valor": 3202.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 256.0, "valor": 34515.53}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "STROGON FRANGO FM", "sabor": "STROGON FRANGO", "tamanho": "FM", "qtd": 7.5, "valor": 945.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 36.75, "valor": 5331.75}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 95.0, "valor": 12437.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 12.25, "valor": 1600.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 33.75, "valor": 3438.84}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 204.583, "valor": 29566.86}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 6.5, "valor": 852.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 36.25, "valor": 5467.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 11.75, "valor": 1928.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 57.917, "valor": 8727.05}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C ATUM FM", "sabor": "CATU C ATUM", "tamanho": "FM", "qtd": 4.75, "valor": 724.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CALABRESA FM", "sabor": "CATU C CALABRESA", "tamanho": "FM", "qtd": 22.75, "valor": 3286.75}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 111.833, "valor": 16112.61}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C PRESUNTO FM", "sabor": "CATU C PRESUNTO", "tamanho": "FM", "qtd": 18.25, "valor": 2647.25}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 36.0, "valor": 5184.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 28.5, "valor": 4097.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 77.0, "valor": 11646.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 12.25, "valor": 1848.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C BACON FM", "sabor": "CATU C BACON", "tamanho": "FM", "qtd": 11.5, "valor": 1892.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHAMPIGNON FM", "sabor": "CHAMPIGNON", "tamanho": "FM", "qtd": 3.75, "valor": 431.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 20.0, "valor": 3035.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 15.75, "valor": 2378.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 25.75, "valor": 3889.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 13.25, "valor": 1996.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOMATE SECO FM", "sabor": "TOMATE SECO", "tamanho": "FM", "qtd": 2.5, "valor": 375.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 28.25, "valor": 4657.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 18.084, "valor": 2973.27}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CREME CAMARAO FM", "sabor": "CREME CAMARAO", "tamanho": "FM", "qtd": 5.0, "valor": 821.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 2.75, "valor": 451.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 6.0, "valor": 793.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 3.25, "valor": 438.25}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 9.25, "valor": 1193.25}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 27.75, "valor": 3597.25}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 7.083, "valor": 925.2}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 15.25, "valor": 1968.75}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 2.5, "valor": 322.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 3.75, "valor": 483.75}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ROMEU JULIETA FM", "sabor": "ROMEU JULIETA", "tamanho": "FM", "qtd": 1.25, "valor": 161.25}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 8.5, "valor": 1281.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 6.75, "valor": 1110.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 9.5, "valor": 1561.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 34.0, "valor": 5597.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM GR", "sabor": "ATUM", "tamanho": "GR", "qtd": 48.0, "valor": 6058.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C ATUM GR", "sabor": "CATU C ATUM", "tamanho": "GR", "qtd": 14.0, "valor": 1778.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C BACON GR", "sabor": "CATU C BACON", "tamanho": "GR", "qtd": 13.5, "valor": 1855.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CALABRESA GR", "sabor": "CATU C CALABRESA", "tamanho": "GR", "qtd": 22.5, "valor": 2658.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 149.0, "valor": 17624.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C PRESUNTO GR", "sabor": "CATU C PRESUNTO", "tamanho": "GR", "qtd": 23.5, "valor": 2787.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 42.0, "valor": 4970.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 320.0, "valor": 37795.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 83.5, "valor": 9105.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 88.5, "valor": 11203.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 302.5, "valor": 18138.33}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 12.0, "valor": 1344.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 47.0, "valor": 787.9}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHAMPIGNON GR", "sabor": "CHAMPIGNON", "tamanho": "GR", "qtd": 2.5, "valor": 317.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 32.5, "valor": 4120.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 19.5, "valor": 2470.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOMATE SECO GR", "sabor": "TOMATE SECO", "tamanho": "GR", "qtd": 5.0, "valor": 643.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 6.0, "valor": 648.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 12.0, "valor": 1512.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 28.5, "valor": 3619.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 15.5, "valor": 1744.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 7.0, "valor": 955.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 15.5, "valor": 2124.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 24.5, "valor": 3353.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 24.0, "valor": 3030.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 9.5, "valor": 1034.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ROMEU JULIETA GR", "sabor": "ROMEU JULIETA", "tamanho": "GR", "qtd": 1.0, "valor": 107.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 4.0, "valor": 432.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 75.0, "valor": 8328.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 4.0, "valor": 438.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 10.0, "valor": 321.06}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 23.0, "valor": 2491.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 64.5, "valor": 8126.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 56.5, "valor": 6702.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 37.0, "valor": 4375.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "STROGON FRANGO GR", "sabor": "STROGON FRANGO", "tamanho": "GR", "qtd": 7.0, "valor": 762.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 13.0, "valor": 1422.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 12.0, "valor": 1303.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 12.5, "valor": 1709.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CREME CAMARAO GR", "sabor": "CREME CAMARAO", "tamanho": "GR", "qtd": 4.0, "valor": 550.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 36.0, "valor": 4563.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 11.0, "valor": 1396.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 10.0, "valor": 1364.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 11.5, "valor": 1573.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 35.5, "valor": 4859.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "STROGON FRANGO PQ", "sabor": "STROGON FRANGO", "tamanho": "PQ", "qtd": 3.5, "valor": 241.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 21.0, "valor": 1650.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C ATUM PQ", "sabor": "CATU C ATUM", "tamanho": "PQ", "qtd": 4.0, "valor": 321.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C BACON PQ", "sabor": "CATU C BACON", "tamanho": "PQ", "qtd": 4.0, "valor": 350.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CALABRESA PQ", "sabor": "CATU C CALABRESA", "tamanho": "PQ", "qtd": 7.0, "valor": 716.9}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 31.5, "valor": 2511.94}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C PRESUNTO PQ", "sabor": "CATU C PRESUNTO", "tamanho": "PQ", "qtd": 10.5, "valor": 810.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 10.5, "valor": 849.97}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 65.0, "valor": 5120.92}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 48.0, "valor": 3394.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 20.5, "valor": 1638.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 65.5, "valor": 4927.25}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 59.5, "valor": 4501.83}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 6.5, "valor": 489.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 4.0, "valor": 287.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHAMPIGNON PQ", "sabor": "CHAMPIGNON", "tamanho": "PQ", "qtd": 1.5, "valor": 120.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 7.5, "valor": 588.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 5.0, "valor": 395.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOMATE SECO PQ", "sabor": "TOMATE SECO", "tamanho": "PQ", "qtd": 1.0, "valor": 79.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 7.5, "valor": 529.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 6.5, "valor": 510.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 2.5, "valor": 198.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 1.0, "valor": 79.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TACACA PQ", "sabor": "TACACA", "tamanho": "PQ", "qtd": 0.5, "valor": 43.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 5.5, "valor": 483.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 8.0, "valor": 694.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 4.5, "valor": 358.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 65.0, "valor": 4655.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 22.5, "valor": 1605.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ROMEU JULIETA PQ", "sabor": "ROMEU JULIETA", "tamanho": "PQ", "qtd": 6.5, "valor": 467.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 7.0, "valor": 496.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 141.0, "valor": 10087.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 9.0, "valor": 636.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 9.0, "valor": 648.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 15.0, "valor": 1234.44}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 12.5, "valor": 978.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 14.0, "valor": 1133.97}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 27.0, "valor": 1929.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 24.0, "valor": 1708.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 3.5, "valor": 304.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CREME CAMARAO PQ", "sabor": "CREME CAMARAO", "tamanho": "PQ", "qtd": 1.5, "valor": 129.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUC C/ TOM CEREJA PQ", "sabor": "RUC C/ TOM CEREJA", "tamanho": "PQ", "qtd": 1.0, "valor": 91.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM LIGHT PQ", "sabor": "ATUM LIGHT", "tamanho": "PQ", "qtd": 2.0, "valor": 182.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ PROMO", "sabor": "BANANA PQ PROMO", "tamanho": "", "qtd": 6.0, "valor": 240.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANC PQ PROMO", "sabor": "CHOCO BRANC PQ PROMO", "tamanho": "", "qtd": 3.0, "valor": 120.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 33.0, "valor": 1320.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUAÇU PQ PROMO", "sabor": "CUPUAÇU PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE LEITE PQ PROMO", "sabor": "DOCE LEITE PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ROMEU/JULIE PQ PROMO", "sabor": "ROMEU/JULIE PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 11.0, "valor": 871.5}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 2.0, "valor": 159.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 3.5, "valor": 307.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 2.0, "valor": 178.0}, {"mes": "2025-03", "periodo": "MAR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 14.0, "valor": 1218.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - PIZZAS GRANDES", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 377.0, "valor": 24750.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 106.0, "valor": 11809.21}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 6.5, "valor": 839.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 24.25, "valor": 3661.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 245.0, "valor": 32537.29}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "STROGON FRANGO FM", "sabor": "STROGON FRANGO", "tamanho": "FM", "qtd": 9.0, "valor": 1147.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 31.25, "valor": 4520.25}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 94.75, "valor": 12252.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 3.75, "valor": 482.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 43.0, "valor": 4149.98}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 209.0, "valor": 30113.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 5.25, "valor": 681.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 35.25, "valor": 5301.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 14.75, "valor": 2422.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 47.25, "valor": 7136.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C ATUM FM", "sabor": "CATU C ATUM", "tamanho": "FM", "qtd": 5.5, "valor": 829.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CALABRESA FM", "sabor": "CATU C CALABRESA", "tamanho": "FM", "qtd": 22.5, "valor": 3231.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 107.25, "valor": 15457.25}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C PRESUNTO FM", "sabor": "CATU C PRESUNTO", "tamanho": "FM", "qtd": 14.75, "valor": 2122.75}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 31.5, "valor": 4529.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 28.25, "valor": 4079.75}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 81.75, "valor": 12318.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 11.5, "valor": 1744.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C BACON FM", "sabor": "CATU C BACON", "tamanho": "FM", "qtd": 10.25, "valor": 1687.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHAMPIGNON FM", "sabor": "CHAMPIGNON", "tamanho": "FM", "qtd": 1.75, "valor": 262.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 18.0, "valor": 2707.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 16.75, "valor": 2523.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 32.0, "valor": 4819.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 14.0, "valor": 2119.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOMATE SECO FM", "sabor": "TOMATE SECO", "tamanho": "FM", "qtd": 6.5, "valor": 979.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 23.25, "valor": 3826.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 16.25, "valor": 2672.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CREME CAMARAO FM", "sabor": "CREME CAMARAO", "tamanho": "FM", "qtd": 6.25, "valor": 1028.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 5.0, "valor": 820.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 2.75, "valor": 354.75}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 6.0, "valor": 791.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 6.25, "valor": 806.25}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 27.75, "valor": 3638.75}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 6.75, "valor": 873.75}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 13.75, "valor": 1773.75}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 3.0, "valor": 387.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 2.5, "valor": 322.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ROMEU JULIETA FM", "sabor": "ROMEU JULIETA", "tamanho": "FM", "qtd": 0.25, "valor": 32.25}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 4.75, "valor": 712.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 8.25, "valor": 1356.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 12.0, "valor": 1977.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 30.0, "valor": 4935.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM GR", "sabor": "ATUM", "tamanho": "GR", "qtd": 45.5, "valor": 5720.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C ATUM GR", "sabor": "CATU C ATUM", "tamanho": "GR", "qtd": 10.0, "valor": 1266.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C BACON GR", "sabor": "CATU C BACON", "tamanho": "GR", "qtd": 13.5, "valor": 1851.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CALABRESA GR", "sabor": "CATU C CALABRESA", "tamanho": "GR", "qtd": 23.0, "valor": 2700.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 155.0, "valor": 18137.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C PRESUNTO GR", "sabor": "CATU C PRESUNTO", "tamanho": "GR", "qtd": 21.5, "valor": 2550.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 39.5, "valor": 4649.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 265.0, "valor": 31152.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 72.0, "valor": 7790.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 81.5, "valor": 10294.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 291.5, "valor": 15929.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 14.5, "valor": 1569.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 23.0, "valor": 433.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHAMPIGNON GR", "sabor": "CHAMPIGNON", "tamanho": "GR", "qtd": 3.5, "valor": 440.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 20.5, "valor": 2598.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 19.5, "valor": 2465.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOMATE SECO GR", "sabor": "TOMATE SECO", "tamanho": "GR", "qtd": 9.5, "valor": 1202.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 8.0, "valor": 853.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 10.0, "valor": 1256.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 35.0, "valor": 4422.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 12.0, "valor": 1308.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 8.5, "valor": 1156.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 13.0, "valor": 1777.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 21.0, "valor": 2868.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 18.5, "valor": 2322.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 11.5, "valor": 1229.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ROMEU JULIETA GR", "sabor": "ROMEU JULIETA", "tamanho": "GR", "qtd": 1.0, "valor": 106.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 1.5, "valor": 159.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 51.0, "valor": 5534.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 5.0, "valor": 541.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 4.0, "valor": 212.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 25.5, "valor": 2741.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 52.5, "valor": 6602.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 55.0, "valor": 6490.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 31.0, "valor": 3636.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "STROGON FRANGO GR", "sabor": "STROGON FRANGO", "tamanho": "GR", "qtd": 5.0, "valor": 535.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 11.5, "valor": 1252.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 6.0, "valor": 650.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 13.0, "valor": 1774.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CREME CAMARAO GR", "sabor": "CREME CAMARAO", "tamanho": "GR", "qtd": 5.0, "valor": 684.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUC C/ TOM CEREJA GR", "sabor": "RUC C/ TOM CEREJA", "tamanho": "GR", "qtd": 2.5, "valor": 335.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BROCOLIS GR", "sabor": "BROCOLIS", "tamanho": "GR", "qtd": 0.5, "valor": 67.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM LIGHT GR", "sabor": "ATUM LIGHT", "tamanho": "GR", "qtd": 3.0, "valor": 402.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 36.0, "valor": 4528.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 9.0, "valor": 1139.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 8.0, "valor": 1088.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 7.0, "valor": 956.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 32.0, "valor": 4380.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "STROGON FRANGO PQ", "sabor": "STROGON FRANGO", "tamanho": "PQ", "qtd": 3.0, "valor": 212.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 20.5, "valor": 1618.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C ATUM PQ", "sabor": "CATU C ATUM", "tamanho": "PQ", "qtd": 5.0, "valor": 401.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C BACON PQ", "sabor": "CATU C BACON", "tamanho": "PQ", "qtd": 1.5, "valor": 132.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CALABRESA PQ", "sabor": "CATU C CALABRESA", "tamanho": "PQ", "qtd": 9.0, "valor": 694.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 37.5, "valor": 2502.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C PRESUNTO PQ", "sabor": "CATU C PRESUNTO", "tamanho": "PQ", "qtd": 5.5, "valor": 432.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 10.5, "valor": 805.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 63.5, "valor": 4877.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 43.0, "valor": 3033.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 18.0, "valor": 1419.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 60.5, "valor": 4520.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 57.5, "valor": 3800.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 5.0, "valor": 360.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 2.0, "valor": 138.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHAMPIGNON PQ", "sabor": "CHAMPIGNON", "tamanho": "PQ", "qtd": 0.5, "valor": 39.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 6.5, "valor": 510.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 2.5, "valor": 204.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOMATE SECO PQ", "sabor": "TOMATE SECO", "tamanho": "PQ", "qtd": 3.0, "valor": 238.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 1.5, "valor": 103.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 1.5, "valor": 117.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 11.0, "valor": 874.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 5.5, "valor": 387.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TACACA PQ", "sabor": "TACACA", "tamanho": "PQ", "qtd": 1.5, "valor": 130.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 5.0, "valor": 437.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 16.5, "valor": 1426.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 9.0, "valor": 708.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 51.5, "valor": 3675.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 22.5, "valor": 1587.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ROMEU JULIETA PQ", "sabor": "ROMEU JULIETA", "tamanho": "PQ", "qtd": 5.5, "valor": 391.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 6.5, "valor": 461.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 103.5, "valor": 7374.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 6.5, "valor": 462.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 7.0, "valor": 496.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "SORVETE PQ", "sabor": "SORVETE", "tamanho": "PQ", "qtd": 4.0, "valor": 312.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 7.0, "valor": 539.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 18.5, "valor": 1446.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 14.5, "valor": 1115.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 20.0, "valor": 1419.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 25.0, "valor": 1772.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 2.0, "valor": 175.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CREME CAMARAO PQ", "sabor": "CREME CAMARAO", "tamanho": "PQ", "qtd": 1.5, "valor": 130.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUC C/ TOM CEREJA PQ", "sabor": "RUC C/ TOM CEREJA", "tamanho": "PQ", "qtd": 4.0, "valor": 364.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM LIGHT PQ", "sabor": "ATUM LIGHT", "tamanho": "PQ", "qtd": 1.0, "valor": 91.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ PROMO", "sabor": "ABACAXI PQ PROMO", "tamanho": "", "qtd": 2.0, "valor": 80.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ PROMO", "sabor": "BANANA PQ PROMO", "tamanho": "", "qtd": 5.0, "valor": 200.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANC PQ PROMO", "sabor": "CHOCO BRANC PQ PROMO", "tamanho": "", "qtd": 4.0, "valor": 160.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 26.0, "valor": 1040.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUAÇU PQ PROMO", "sabor": "CUPUAÇU PQ PROMO", "tamanho": "", "qtd": 2.0, "valor": 80.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ROMEU/JULIE PQ PROMO", "sabor": "ROMEU/JULIE PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 11.5, "valor": 901.5}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 3.0, "valor": 243.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 2.5, "valor": 219.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 2.5, "valor": 215.0}, {"mes": "2025-04", "periodo": "ABR25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 13.0, "valor": 1128.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - PIZZAS GRANDES", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 381.0, "valor": 37550.62}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 84.75, "valor": 9201.63}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 5.0, "valor": 643.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 19.25, "valor": 2899.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 297.25, "valor": 37311.33}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "STROGON FRANGO FM", "sabor": "STROGON FRANGO", "tamanho": "FM", "qtd": 6.5, "valor": 840.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 41.25, "valor": 6023.75}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 89.5, "valor": 11648.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 8.75, "valor": 1127.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 59.0, "valor": 5404.78}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 203.0, "valor": 29256.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 3.75, "valor": 494.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 33.5, "valor": 5040.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 13.25, "valor": 2176.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 57.25, "valor": 8630.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C ATUM FM", "sabor": "CATU C ATUM", "tamanho": "FM", "qtd": 4.25, "valor": 639.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CALABRESA FM", "sabor": "CATU C CALABRESA", "tamanho": "FM", "qtd": 16.5, "valor": 2378.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 120.25, "valor": 17340.25}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C PRESUNTO FM", "sabor": "CATU C PRESUNTO", "tamanho": "FM", "qtd": 17.25, "valor": 2515.25}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 29.0, "valor": 4148.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 34.5, "valor": 4978.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 76.75, "valor": 11599.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 7.25, "valor": 1092.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C BACON FM", "sabor": "CATU C BACON", "tamanho": "FM", "qtd": 10.75, "valor": 1767.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHAMPIGNON FM", "sabor": "CHAMPIGNON", "tamanho": "FM", "qtd": 2.25, "valor": 337.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 16.0, "valor": 2407.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 18.75, "valor": 2814.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 26.5, "valor": 4007.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 19.25, "valor": 2906.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOMATE SECO FM", "sabor": "TOMATE SECO", "tamanho": "FM", "qtd": 4.75, "valor": 718.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 27.75, "valor": 4567.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 14.25, "valor": 2346.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CREME CAMARAO FM", "sabor": "CREME CAMARAO", "tamanho": "FM", "qtd": 6.25, "valor": 1028.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 7.25, "valor": 1192.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 3.0, "valor": 387.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 9.25, "valor": 1194.75}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 4.5, "valor": 580.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 32.25, "valor": 4200.75}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 4.25, "valor": 548.25}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 18.25, "valor": 2371.25}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 3.25, "valor": 419.25}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 4.5, "valor": 464.4}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ROMEU JULIETA FM", "sabor": "ROMEU JULIETA", "tamanho": "FM", "qtd": 1.75, "valor": 225.75}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 6.75, "valor": 1032.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 12.5, "valor": 2057.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 6.75, "valor": 1110.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 28.5, "valor": 4693.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM GR", "sabor": "ATUM", "tamanho": "GR", "qtd": 41.5, "valor": 5250.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C ATUM GR", "sabor": "CATU C ATUM", "tamanho": "GR", "qtd": 8.0, "valor": 1015.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C BACON GR", "sabor": "CATU C BACON", "tamanho": "GR", "qtd": 14.0, "valor": 1925.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CALABRESA GR", "sabor": "CATU C CALABRESA", "tamanho": "GR", "qtd": 22.0, "valor": 2615.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 168.5, "valor": 19829.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C PRESUNTO GR", "sabor": "CATU C PRESUNTO", "tamanho": "GR", "qtd": 34.5, "valor": 4105.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 49.5, "valor": 5874.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 383.5, "valor": 39393.24}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 129.0, "valor": 12005.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 83.0, "valor": 10474.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 261.5, "valor": 24273.61}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 14.0, "valor": 1570.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 13.5, "valor": 1286.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHAMPIGNON GR", "sabor": "CHAMPIGNON", "tamanho": "GR", "qtd": 3.5, "valor": 440.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 31.0, "valor": 3903.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 14.0, "valor": 1775.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOMATE SECO GR", "sabor": "TOMATE SECO", "tamanho": "GR", "qtd": 7.5, "valor": 948.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 10.0, "valor": 1050.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 10.0, "valor": 1256.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 29.0, "valor": 3679.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 12.5, "valor": 1392.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 9.5, "valor": 1295.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 15.5, "valor": 2129.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 32.0, "valor": 4386.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 21.5, "valor": 2695.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 15.0, "valor": 1612.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ROMEU JULIETA GR", "sabor": "ROMEU JULIETA", "tamanho": "GR", "qtd": 1.5, "valor": 162.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 2.5, "valor": 273.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 62.5, "valor": 6829.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 7.0, "valor": 757.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 4.0, "valor": 450.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 31.0, "valor": 3368.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 65.0, "valor": 8201.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 53.0, "valor": 6304.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 49.0, "valor": 5749.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "STROGON FRANGO GR", "sabor": "STROGON FRANGO", "tamanho": "GR", "qtd": 7.5, "valor": 801.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 19.5, "valor": 2137.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 15.5, "valor": 1660.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 13.5, "valor": 1851.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CREME CAMARAO GR", "sabor": "CREME CAMARAO", "tamanho": "GR", "qtd": 6.0, "valor": 820.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUC C/ TOM CEREJA GR", "sabor": "RUC C/ TOM CEREJA", "tamanho": "GR", "qtd": 0.5, "valor": 67.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BROCOLIS GR", "sabor": "BROCOLIS", "tamanho": "GR", "qtd": 1.0, "valor": 134.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM LIGHT GR", "sabor": "ATUM LIGHT", "tamanho": "GR", "qtd": 0.5, "valor": 67.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 33.0, "valor": 4193.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 12.5, "valor": 1625.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 9.0, "valor": 1234.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 10.5, "valor": 1438.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 32.0, "valor": 4377.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "STROGON FRANGO PQ", "sabor": "STROGON FRANGO", "tamanho": "PQ", "qtd": 1.0, "valor": 69.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 19.0, "valor": 1503.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C ATUM PQ", "sabor": "CATU C ATUM", "tamanho": "PQ", "qtd": 6.5, "valor": 528.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C BACON PQ", "sabor": "CATU C BACON", "tamanho": "PQ", "qtd": 2.5, "valor": 221.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CALABRESA PQ", "sabor": "CATU C CALABRESA", "tamanho": "PQ", "qtd": 10.5, "valor": 810.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 41.0, "valor": 3183.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C PRESUNTO PQ", "sabor": "CATU C PRESUNTO", "tamanho": "PQ", "qtd": 6.5, "valor": 497.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 21.0, "valor": 1623.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 74.0, "valor": 5732.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 36.0, "valor": 2540.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 33.5, "valor": 2647.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 59.5, "valor": 4592.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 46.5, "valor": 3285.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 6.0, "valor": 424.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 4.5, "valor": 323.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHAMPIGNON PQ", "sabor": "CHAMPIGNON", "tamanho": "PQ", "qtd": 0.5, "valor": 39.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 8.5, "valor": 670.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 9.0, "valor": 708.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOMATE SECO PQ", "sabor": "TOMATE SECO", "tamanho": "PQ", "qtd": 4.0, "valor": 326.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 6.0, "valor": 414.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 5.5, "valor": 433.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 13.0, "valor": 1036.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 2.0, "valor": 149.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TACACA PQ", "sabor": "TACACA", "tamanho": "PQ", "qtd": 3.0, "valor": 258.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 7.0, "valor": 609.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 14.5, "valor": 1259.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 13.0, "valor": 1017.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 69.0, "valor": 4927.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 25.5, "valor": 1795.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ROMEU JULIETA PQ", "sabor": "ROMEU JULIETA", "tamanho": "PQ", "qtd": 4.0, "valor": 287.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 5.5, "valor": 394.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 125.0, "valor": 8940.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 10.5, "valor": 745.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 9.5, "valor": 677.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "SORVETE PQ", "sabor": "SORVETE", "tamanho": "PQ", "qtd": 2.0, "valor": 156.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 13.0, "valor": 1001.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 24.0, "valor": 1900.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 20.5, "valor": 1588.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 27.5, "valor": 1961.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 22.5, "valor": 1603.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 9.0, "valor": 778.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CREME CAMARAO PQ", "sabor": "CREME CAMARAO", "tamanho": "PQ", "qtd": 3.0, "valor": 262.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUC C/ TOM CEREJA PQ", "sabor": "RUC C/ TOM CEREJA", "tamanho": "PQ", "qtd": 2.5, "valor": 227.5}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BROCOLIS PQ", "sabor": "BROCOLIS", "tamanho": "PQ", "qtd": 2.0, "valor": 182.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM LIGHT PQ", "sabor": "ATUM LIGHT", "tamanho": "PQ", "qtd": 8.0, "valor": 728.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ PROMO", "sabor": "BANANA PQ PROMO", "tamanho": "", "qtd": 3.0, "valor": 120.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANC PQ PROMO", "sabor": "CHOCO BRANC PQ PROMO", "tamanho": "", "qtd": 3.0, "valor": 120.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 18.0, "valor": 720.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUAÇU PQ PROMO", "sabor": "CUPUAÇU PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE LEITE PQ PROMO", "sabor": "DOCE LEITE PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ROMEU/JULIE PQ PROMO", "sabor": "ROMEU/JULIE PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 7.5, "valor": 595.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 5.0, "valor": 396.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 4.5, "valor": 391.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 3.5, "valor": 311.0}, {"mes": "2025-05", "periodo": "MAI25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 20.5, "valor": 1781.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - PIZZAS GRANDES", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 452.5, "valor": 45368.17}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 71.25, "valor": 8893.74}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 5.0, "valor": 643.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 23.5, "valor": 3547.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 229.25, "valor": 32549.6}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "STROGON FRANGO FM", "sabor": "STROGON FRANGO", "tamanho": "FM", "qtd": 5.0, "valor": 631.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 42.75, "valor": 6190.25}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 120.5, "valor": 15730.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 9.75, "valor": 1273.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 16.25, "valor": 2016.87}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 223.0, "valor": 32103.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 8.0, "valor": 1052.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 32.25, "valor": 4861.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 10.0, "valor": 1643.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 53.25, "valor": 8018.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C ATUM FM", "sabor": "CATU C ATUM", "tamanho": "FM", "qtd": 2.25, "valor": 337.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CALABRESA FM", "sabor": "CATU C CALABRESA", "tamanho": "FM", "qtd": 25.75, "valor": 3740.75}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 131.75, "valor": 19000.25}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C PRESUNTO FM", "sabor": "CATU C PRESUNTO", "tamanho": "FM", "qtd": 24.0, "valor": 3489.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 32.0, "valor": 4580.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 37.75, "valor": 5484.75}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 80.5, "valor": 12166.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 9.75, "valor": 1475.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C BACON FM", "sabor": "CATU C BACON", "tamanho": "FM", "qtd": 14.0, "valor": 2303.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHAMPIGNON FM", "sabor": "CHAMPIGNON", "tamanho": "FM", "qtd": 2.5, "valor": 378.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 19.25, "valor": 2905.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 21.5, "valor": 3237.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 30.75, "valor": 4649.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 16.25, "valor": 2455.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOMATE SECO FM", "sabor": "TOMATE SECO", "tamanho": "FM", "qtd": 5.5, "valor": 829.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 32.75, "valor": 5396.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 14.0, "valor": 2305.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CREME CAMARAO FM", "sabor": "CREME CAMARAO", "tamanho": "FM", "qtd": 4.5, "valor": 742.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 6.25, "valor": 1026.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 4.25, "valor": 548.25}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 9.75, "valor": 1259.25}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 6.5, "valor": 850.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 34.5, "valor": 4544.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 5.25, "valor": 688.75}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 15.5, "valor": 2018.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 2.75, "valor": 373.75}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 3.5, "valor": 470.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ROMEU JULIETA FM", "sabor": "ROMEU JULIETA", "tamanho": "FM", "qtd": 2.0, "valor": 258.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 9.75, "valor": 1484.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 10.0, "valor": 1646.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 7.25, "valor": 1193.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 25.25, "valor": 4165.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM GR", "sabor": "ATUM", "tamanho": "GR", "qtd": 64.5, "valor": 8159.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C ATUM GR", "sabor": "CATU C ATUM", "tamanho": "GR", "qtd": 11.0, "valor": 1404.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C BACON GR", "sabor": "CATU C BACON", "tamanho": "GR", "qtd": 11.0, "valor": 1509.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CALABRESA GR", "sabor": "CATU C CALABRESA", "tamanho": "GR", "qtd": 27.0, "valor": 3181.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 176.0, "valor": 20753.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C PRESUNTO GR", "sabor": "CATU C PRESUNTO", "tamanho": "GR", "qtd": 36.5, "valor": 4320.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 56.0, "valor": 6635.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 343.0, "valor": 40640.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 170.0, "valor": 16372.6}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 108.0, "valor": 13644.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 184.5, "valor": 20334.98}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 44.5, "valor": 4090.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 7.0, "valor": 770.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHAMPIGNON GR", "sabor": "CHAMPIGNON", "tamanho": "GR", "qtd": 4.0, "valor": 513.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 32.5, "valor": 4117.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 28.5, "valor": 3618.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOMATE SECO GR", "sabor": "TOMATE SECO", "tamanho": "GR", "qtd": 12.0, "valor": 1522.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 7.5, "valor": 808.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 15.0, "valor": 1899.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 40.5, "valor": 5121.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 10.5, "valor": 1184.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 8.5, "valor": 1156.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 22.0, "valor": 3013.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 39.5, "valor": 5411.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 25.0, "valor": 3149.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 18.5, "valor": 1979.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ROMEU JULIETA GR", "sabor": "ROMEU JULIETA", "tamanho": "GR", "qtd": 1.0, "valor": 107.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 7.5, "valor": 804.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 74.5, "valor": 8140.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 9.5, "valor": 1037.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 4.5, "valor": 491.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 27.0, "valor": 2920.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 72.0, "valor": 9079.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 63.0, "valor": 7518.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 35.0, "valor": 4106.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "STROGON FRANGO GR", "sabor": "STROGON FRANGO", "tamanho": "GR", "qtd": 26.0, "valor": 2187.7}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 18.0, "valor": 1979.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 20.0, "valor": 2180.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 16.5, "valor": 2250.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CREME CAMARAO GR", "sabor": "CREME CAMARAO", "tamanho": "GR", "qtd": 8.0, "valor": 1095.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUC C/ TOM CEREJA GR", "sabor": "RUC C/ TOM CEREJA", "tamanho": "GR", "qtd": 0.5, "valor": 67.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM LIGHT GR", "sabor": "ATUM LIGHT", "tamanho": "GR", "qtd": 0.5, "valor": 67.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 36.5, "valor": 4631.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 11.0, "valor": 1389.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 14.5, "valor": 1987.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 11.5, "valor": 1576.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 43.5, "valor": 5967.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Média", "grupo_raw": "Z - PIZZA MEDIA", "material": "PIZZA DO AMOR", "sabor": "PIZZA DO AMOR", "tamanho": "", "qtd": 45.0, "valor": 3065.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "STROGON FRANGO PQ", "sabor": "STROGON FRANGO", "tamanho": "PQ", "qtd": 1.5, "valor": 103.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 16.5, "valor": 1300.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C ATUM PQ", "sabor": "CATU C ATUM", "tamanho": "PQ", "qtd": 2.0, "valor": 156.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C BACON PQ", "sabor": "CATU C BACON", "tamanho": "PQ", "qtd": 1.5, "valor": 129.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CALABRESA PQ", "sabor": "CATU C CALABRESA", "tamanho": "PQ", "qtd": 5.5, "valor": 432.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 45.5, "valor": 3486.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C PRESUNTO PQ", "sabor": "CATU C PRESUNTO", "tamanho": "PQ", "qtd": 9.0, "valor": 697.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 18.0, "valor": 1400.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 66.0, "valor": 5098.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 35.0, "valor": 2500.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 26.5, "valor": 2103.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 61.5, "valor": 4759.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 60.5, "valor": 4298.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 5.5, "valor": 395.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 2.5, "valor": 180.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHAMPIGNON PQ", "sabor": "CHAMPIGNON", "tamanho": "PQ", "qtd": 1.0, "valor": 78.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 7.5, "valor": 597.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 6.0, "valor": 471.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOMATE SECO PQ", "sabor": "TOMATE SECO", "tamanho": "PQ", "qtd": 4.0, "valor": 321.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 5.5, "valor": 379.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 3.0, "valor": 240.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 13.5, "valor": 1069.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 5.0, "valor": 362.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TACACA PQ", "sabor": "TACACA", "tamanho": "PQ", "qtd": 3.5, "valor": 301.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 8.5, "valor": 739.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 17.5, "valor": 1515.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 10.5, "valor": 822.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 80.5, "valor": 5782.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 29.0, "valor": 2052.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ROMEU JULIETA PQ", "sabor": "ROMEU JULIETA", "tamanho": "PQ", "qtd": 5.5, "valor": 388.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 19.0, "valor": 1357.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 160.0, "valor": 11473.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 14.5, "valor": 1028.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 6.0, "valor": 426.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "SORVETE PQ", "sabor": "SORVETE", "tamanho": "PQ", "qtd": 3.0, "valor": 234.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 6.5, "valor": 501.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 18.5, "valor": 1450.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 11.5, "valor": 886.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 27.0, "valor": 1941.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 25.0, "valor": 1780.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 1.5, "valor": 129.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CREME CAMARAO PQ", "sabor": "CREME CAMARAO", "tamanho": "PQ", "qtd": 2.5, "valor": 221.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUC C/ TOM CEREJA PQ", "sabor": "RUC C/ TOM CEREJA", "tamanho": "PQ", "qtd": 0.5, "valor": 45.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BROCOLIS PQ", "sabor": "BROCOLIS", "tamanho": "PQ", "qtd": 3.0, "valor": 273.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM LIGHT PQ", "sabor": "ATUM LIGHT", "tamanho": "PQ", "qtd": 3.5, "valor": 318.5}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ PROMO", "sabor": "BANANA PQ PROMO", "tamanho": "", "qtd": 6.0, "valor": 240.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANC PQ PROMO", "sabor": "CHOCO BRANC PQ PROMO", "tamanho": "", "qtd": 6.0, "valor": 240.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 7.0, "valor": 280.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE LEITE PQ PROMO", "sabor": "DOCE LEITE PQ PROMO", "tamanho": "", "qtd": 2.0, "valor": 80.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 14.0, "valor": 1116.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 2.5, "valor": 204.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 4.0, "valor": 352.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 2.0, "valor": 174.0}, {"mes": "2025-06", "periodo": "JUN25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 14.0, "valor": 1224.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - PIZZAS GRANDES", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 592.0, "valor": 54160.79}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 64.25, "valor": 8320.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 5.75, "valor": 758.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 24.5, "valor": 3710.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 219.75, "valor": 31804.25}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "STROGON FRANGO FM", "sabor": "STROGON FRANGO", "tamanho": "FM", "qtd": 8.5, "valor": 1072.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 41.0, "valor": 5947.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 127.083, "valor": 16790.45}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 9.75, "valor": 1319.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 11.75, "valor": 1547.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 236.333, "valor": 34177.61}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 5.5, "valor": 726.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 44.25, "valor": 6679.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 14.5, "valor": 2382.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 69.5, "valor": 10508.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C ATUM FM", "sabor": "CATU C ATUM", "tamanho": "FM", "qtd": 5.75, "valor": 867.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CALABRESA FM", "sabor": "CATU C CALABRESA", "tamanho": "FM", "qtd": 25.5, "valor": 3686.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 122.25, "valor": 17742.75}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C PRESUNTO FM", "sabor": "CATU C PRESUNTO", "tamanho": "FM", "qtd": 15.5, "valor": 2252.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 31.5, "valor": 4514.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 29.75, "valor": 4310.25}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 86.834, "valor": 13115.1}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 16.75, "valor": 2530.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C BACON FM", "sabor": "CATU C BACON", "tamanho": "FM", "qtd": 14.25, "valor": 2347.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHAMPIGNON FM", "sabor": "CHAMPIGNON", "tamanho": "FM", "qtd": 2.0, "valor": 303.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 20.75, "valor": 3120.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 15.5, "valor": 2332.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 36.25, "valor": 5484.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 18.5, "valor": 2782.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOMATE SECO FM", "sabor": "TOMATE SECO", "tamanho": "FM", "qtd": 7.25, "valor": 1099.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 33.0, "valor": 5443.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 15.75, "valor": 2598.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CREME CAMARAO FM", "sabor": "CREME CAMARAO", "tamanho": "FM", "qtd": 5.75, "valor": 946.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 7.5, "valor": 1240.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 4.75, "valor": 612.75}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 9.25, "valor": 1194.75}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 10.0, "valor": 1300.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 34.0, "valor": 4457.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 7.75, "valor": 1043.25}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 14.75, "valor": 1915.75}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 4.5, "valor": 601.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 2.5, "valor": 322.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ROMEU JULIETA FM", "sabor": "ROMEU JULIETA", "tamanho": "FM", "qtd": 1.25, "valor": 161.25}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 8.5, "valor": 1288.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 11.0, "valor": 1817.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 12.75, "valor": 2100.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 33.25, "valor": 5481.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM GR", "sabor": "ATUM", "tamanho": "GR", "qtd": 48.0, "valor": 6062.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C ATUM GR", "sabor": "CATU C ATUM", "tamanho": "GR", "qtd": 7.5, "valor": 945.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C BACON GR", "sabor": "CATU C BACON", "tamanho": "GR", "qtd": 13.0, "valor": 1784.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CALABRESA GR", "sabor": "CATU C CALABRESA", "tamanho": "GR", "qtd": 28.5, "valor": 3364.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 154.5, "valor": 18208.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C PRESUNTO GR", "sabor": "CATU C PRESUNTO", "tamanho": "GR", "qtd": 29.0, "valor": 3447.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 43.0, "valor": 5140.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 300.5, "valor": 35564.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 174.5, "valor": 15626.13}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 95.5, "valor": 12107.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 216.5, "valor": 23479.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 129.5, "valor": 9752.9}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 11.0, "valor": 1201.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHAMPIGNON GR", "sabor": "CHAMPIGNON", "tamanho": "GR", "qtd": 4.0, "valor": 507.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 24.0, "valor": 3039.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 25.5, "valor": 3229.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOMATE SECO GR", "sabor": "TOMATE SECO", "tamanho": "GR", "qtd": 7.5, "valor": 959.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 11.5, "valor": 1225.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 13.0, "valor": 1647.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 35.5, "valor": 4493.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 13.5, "valor": 1500.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 9.0, "valor": 1230.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 21.0, "valor": 2881.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 29.0, "valor": 3971.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 18.0, "valor": 2270.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 19.5, "valor": 2095.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ROMEU JULIETA GR", "sabor": "ROMEU JULIETA", "tamanho": "GR", "qtd": 2.5, "valor": 268.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 4.0, "valor": 435.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 65.0, "valor": 7187.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 4.5, "valor": 519.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 3.5, "valor": 379.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 35.5, "valor": 3849.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 60.0, "valor": 7570.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 58.0, "valor": 6998.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 35.5, "valor": 4176.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "STROGON FRANGO GR", "sabor": "STROGON FRANGO", "tamanho": "GR", "qtd": 24.5, "valor": 2071.67}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 16.0, "valor": 1741.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 8.0, "valor": 857.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 22.5, "valor": 3078.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CREME CAMARAO GR", "sabor": "CREME CAMARAO", "tamanho": "GR", "qtd": 9.0, "valor": 1237.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BROCOLIS GR", "sabor": "BROCOLIS", "tamanho": "GR", "qtd": 1.5, "valor": 201.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM LIGHT GR", "sabor": "ATUM LIGHT", "tamanho": "GR", "qtd": 0.5, "valor": 67.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 47.0, "valor": 5966.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 11.0, "valor": 1410.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 14.0, "valor": 1917.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 11.0, "valor": 1509.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 37.5, "valor": 5130.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "STROGON FRANGO PQ", "sabor": "STROGON FRANGO", "tamanho": "PQ", "qtd": 3.5, "valor": 241.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 19.5, "valor": 1528.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C ATUM PQ", "sabor": "CATU C ATUM", "tamanho": "PQ", "qtd": 5.0, "valor": 394.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C BACON PQ", "sabor": "CATU C BACON", "tamanho": "PQ", "qtd": 2.5, "valor": 220.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CALABRESA PQ", "sabor": "CATU C CALABRESA", "tamanho": "PQ", "qtd": 4.0, "valor": 305.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 38.0, "valor": 2962.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C PRESUNTO PQ", "sabor": "CATU C PRESUNTO", "tamanho": "PQ", "qtd": 11.5, "valor": 895.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 17.5, "valor": 1355.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 73.5, "valor": 5696.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 37.0, "valor": 2633.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 21.0, "valor": 1660.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 44.0, "valor": 3392.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 60.0, "valor": 4292.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 5.5, "valor": 384.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 3.0, "valor": 218.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHAMPIGNON PQ", "sabor": "CHAMPIGNON", "tamanho": "PQ", "qtd": 2.5, "valor": 195.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 10.0, "valor": 790.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 6.5, "valor": 518.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOMATE SECO PQ", "sabor": "TOMATE SECO", "tamanho": "PQ", "qtd": 2.0, "valor": 159.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 5.5, "valor": 385.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 4.5, "valor": 355.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 4.0, "valor": 328.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 1.5, "valor": 108.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TACACA PQ", "sabor": "TACACA", "tamanho": "PQ", "qtd": 4.5, "valor": 393.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 11.0, "valor": 964.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 8.5, "valor": 738.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 11.5, "valor": 897.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 63.5, "valor": 4527.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 30.5, "valor": 2157.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ROMEU JULIETA PQ", "sabor": "ROMEU JULIETA", "tamanho": "PQ", "qtd": 3.0, "valor": 213.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 9.5, "valor": 674.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 159.0, "valor": 11395.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 9.0, "valor": 640.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 8.5, "valor": 604.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "SORVETE PQ", "sabor": "SORVETE", "tamanho": "PQ", "qtd": 5.0, "valor": 390.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 12.0, "valor": 920.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 16.0, "valor": 1267.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 19.5, "valor": 1522.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 32.5, "valor": 2336.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 21.5, "valor": 1530.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 6.5, "valor": 562.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CREME CAMARAO PQ", "sabor": "CREME CAMARAO", "tamanho": "PQ", "qtd": 0.5, "valor": 44.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUC C/ TOM CEREJA PQ", "sabor": "RUC C/ TOM CEREJA", "tamanho": "PQ", "qtd": 1.5, "valor": 136.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM LIGHT PQ", "sabor": "ATUM LIGHT", "tamanho": "PQ", "qtd": 2.5, "valor": 227.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ PROMO", "sabor": "BANANA PQ PROMO", "tamanho": "", "qtd": 3.0, "valor": 120.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANC PQ PROMO", "sabor": "CHOCO BRANC PQ PROMO", "tamanho": "", "qtd": 5.0, "valor": 200.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 4.0, "valor": 160.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUAÇU PQ PROMO", "sabor": "CUPUAÇU PQ PROMO", "tamanho": "", "qtd": 4.0, "valor": 160.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 13.0, "valor": 1027.5}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 3.5, "valor": 282.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 4.5, "valor": 391.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 2.0, "valor": 180.0}, {"mes": "2025-07", "periodo": "JUL25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 20.0, "valor": 1750.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - PIZZAS GRANDES", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 465.5, "valor": 46849.37}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 66.75, "valor": 8774.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 7.0, "valor": 916.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 17.75, "valor": 2673.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 217.75, "valor": 31467.75}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "STROGON FRANGO FM", "sabor": "STROGON FRANGO", "tamanho": "FM", "qtd": 8.0, "valor": 1038.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 44.5, "valor": 6421.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 141.5, "valor": 18449.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 12.25, "valor": 1614.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 14.25, "valor": 1860.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 250.5, "valor": 36142.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 5.75, "valor": 740.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 42.75, "valor": 6468.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 14.75, "valor": 2420.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 65.25, "valor": 9844.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C ATUM FM", "sabor": "CATU C ATUM", "tamanho": "FM", "qtd": 4.5, "valor": 693.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CALABRESA FM", "sabor": "CATU C CALABRESA", "tamanho": "FM", "qtd": 27.75, "valor": 3989.25}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 152.75, "valor": 22021.75}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C PRESUNTO FM", "sabor": "CATU C PRESUNTO", "tamanho": "FM", "qtd": 27.0, "valor": 3926.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 39.5, "valor": 5706.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 37.75, "valor": 5448.75}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 88.5, "valor": 13376.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 12.75, "valor": 1927.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C BACON FM", "sabor": "CATU C BACON", "tamanho": "FM", "qtd": 13.5, "valor": 2223.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHAMPIGNON FM", "sabor": "CHAMPIGNON", "tamanho": "FM", "qtd": 2.0, "valor": 300.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 34.0, "valor": 5156.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 20.75, "valor": 3123.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 33.0, "valor": 4989.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 16.5, "valor": 2478.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOMATE SECO FM", "sabor": "TOMATE SECO", "tamanho": "FM", "qtd": 7.75, "valor": 1173.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 36.25, "valor": 5970.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 18.0, "valor": 2961.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CREME CAMARAO FM", "sabor": "CREME CAMARAO", "tamanho": "FM", "qtd": 7.5, "valor": 1234.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 5.75, "valor": 950.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 4.0, "valor": 516.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 12.5, "valor": 1612.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 12.75, "valor": 1656.75}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 28.25, "valor": 3673.25}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 9.0, "valor": 1180.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 23.5, "valor": 3049.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 2.25, "valor": 290.25}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 3.0, "valor": 387.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ROMEU JULIETA FM", "sabor": "ROMEU JULIETA", "tamanho": "FM", "qtd": 2.75, "valor": 354.75}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 6.0, "valor": 906.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 10.0, "valor": 1646.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 11.5, "valor": 1895.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 33.25, "valor": 5477.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM GR", "sabor": "ATUM", "tamanho": "GR", "qtd": 46.0, "valor": 5831.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C ATUM GR", "sabor": "CATU C ATUM", "tamanho": "GR", "qtd": 12.0, "valor": 1529.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C BACON GR", "sabor": "CATU C BACON", "tamanho": "GR", "qtd": 13.5, "valor": 1858.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CALABRESA GR", "sabor": "CATU C CALABRESA", "tamanho": "GR", "qtd": 24.5, "valor": 2914.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 211.5, "valor": 24995.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C PRESUNTO GR", "sabor": "CATU C PRESUNTO", "tamanho": "GR", "qtd": 32.0, "valor": 3820.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 47.5, "valor": 5636.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 342.5, "valor": 40531.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 169.5, "valor": 16710.61}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 100.5, "valor": 12739.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 187.5, "valor": 20671.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 70.0, "valor": 6064.49}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 6.0, "valor": 673.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHAMPIGNON GR", "sabor": "CHAMPIGNON", "tamanho": "GR", "qtd": 6.5, "valor": 822.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 36.0, "valor": 4544.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 21.0, "valor": 2658.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOMATE SECO GR", "sabor": "TOMATE SECO", "tamanho": "GR", "qtd": 9.0, "valor": 1149.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 8.0, "valor": 879.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 9.5, "valor": 1202.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 42.0, "valor": 5341.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 14.0, "valor": 1545.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 12.5, "valor": 1710.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 16.5, "valor": 2269.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 40.5, "valor": 5553.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 21.5, "valor": 2705.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 20.0, "valor": 2151.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ROMEU JULIETA GR", "sabor": "ROMEU JULIETA", "tamanho": "GR", "qtd": 3.5, "valor": 387.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 5.0, "valor": 534.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 57.5, "valor": 6320.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 8.5, "valor": 934.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 5.0, "valor": 536.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 26.5, "valor": 2846.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 68.0, "valor": 8572.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 64.0, "valor": 7637.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 32.0, "valor": 3791.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "STROGON FRANGO GR", "sabor": "STROGON FRANGO", "tamanho": "GR", "qtd": 7.0, "valor": 722.4}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 16.5, "valor": 1792.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 14.0, "valor": 1521.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 18.5, "valor": 2528.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CREME CAMARAO GR", "sabor": "CREME CAMARAO", "tamanho": "GR", "qtd": 5.5, "valor": 752.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUC C/ TOM CEREJA GR", "sabor": "RUC C/ TOM CEREJA", "tamanho": "GR", "qtd": 3.0, "valor": 402.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 46.5, "valor": 5898.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 15.0, "valor": 1924.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 18.5, "valor": 2535.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 12.0, "valor": 1647.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 38.0, "valor": 5214.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "STROGON FRANGO PQ", "sabor": "STROGON FRANGO", "tamanho": "PQ", "qtd": 1.5, "valor": 109.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 16.5, "valor": 1301.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C ATUM PQ", "sabor": "CATU C ATUM", "tamanho": "PQ", "qtd": 7.5, "valor": 585.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C BACON PQ", "sabor": "CATU C BACON", "tamanho": "PQ", "qtd": 2.5, "valor": 219.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CALABRESA PQ", "sabor": "CATU C CALABRESA", "tamanho": "PQ", "qtd": 8.0, "valor": 613.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 45.0, "valor": 3495.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C PRESUNTO PQ", "sabor": "CATU C PRESUNTO", "tamanho": "PQ", "qtd": 10.0, "valor": 777.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 20.0, "valor": 1543.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 77.5, "valor": 5986.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 46.5, "valor": 3307.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 32.5, "valor": 2575.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 63.5, "valor": 4896.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 60.0, "valor": 4299.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 9.0, "valor": 633.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 3.5, "valor": 252.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHAMPIGNON PQ", "sabor": "CHAMPIGNON", "tamanho": "PQ", "qtd": 2.0, "valor": 159.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 7.0, "valor": 549.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 2.5, "valor": 196.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOMATE SECO PQ", "sabor": "TOMATE SECO", "tamanho": "PQ", "qtd": 5.5, "valor": 450.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 5.5, "valor": 382.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 2.5, "valor": 198.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 8.5, "valor": 670.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 7.5, "valor": 542.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TACACA PQ", "sabor": "TACACA", "tamanho": "PQ", "qtd": 2.5, "valor": 218.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 6.0, "valor": 525.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 12.0, "valor": 1039.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 5.5, "valor": 435.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 74.5, "valor": 5314.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 36.5, "valor": 2594.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ROMEU JULIETA PQ", "sabor": "ROMEU JULIETA", "tamanho": "PQ", "qtd": 6.5, "valor": 464.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 10.5, "valor": 745.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 165.0, "valor": 11796.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 13.5, "valor": 957.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 9.0, "valor": 614.47}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "SORVETE PQ", "sabor": "SORVETE", "tamanho": "PQ", "qtd": 2.0, "valor": 156.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 8.5, "valor": 662.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 23.0, "valor": 1809.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 21.5, "valor": 1673.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 38.0, "valor": 2517.79}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 28.5, "valor": 2028.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 2.5, "valor": 215.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CREME CAMARAO PQ", "sabor": "CREME CAMARAO", "tamanho": "PQ", "qtd": 1.5, "valor": 130.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUC C/ TOM CEREJA PQ", "sabor": "RUC C/ TOM CEREJA", "tamanho": "PQ", "qtd": 0.5, "valor": 45.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BROCOLIS PQ", "sabor": "BROCOLIS", "tamanho": "PQ", "qtd": 2.0, "valor": 182.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM LIGHT PQ", "sabor": "ATUM LIGHT", "tamanho": "PQ", "qtd": 2.0, "valor": 182.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ PROMO", "sabor": "ABACAXI PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ PROMO", "sabor": "BANANA PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANC PQ PROMO", "sabor": "CHOCO BRANC PQ PROMO", "tamanho": "", "qtd": 3.0, "valor": 120.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 14.5, "valor": 1165.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 6.0, "valor": 482.5}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 6.0, "valor": 528.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 2.5, "valor": 221.0}, {"mes": "2025-08", "periodo": "AGO25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 19.0, "valor": 1670.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - PIZZAS GRANDES", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 438.5, "valor": 41513.02}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 68.0, "valor": 9128.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 4.25, "valor": 570.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 17.75, "valor": 2747.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 214.5, "valor": 31495.75}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "STROGON FRANGO FM", "sabor": "STROGON FRANGO", "tamanho": "FM", "qtd": 2.75, "valor": 346.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 26.0, "valor": 3826.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 98.5, "valor": 13335.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 8.25, "valor": 1102.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 9.25, "valor": 1226.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 209.75, "valor": 30853.75}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 5.75, "valor": 790.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 32.75, "valor": 5029.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 9.0, "valor": 1481.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 37.0, "valor": 5660.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C ATUM FM", "sabor": "CATU C ATUM", "tamanho": "FM", "qtd": 7.25, "valor": 1098.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CALABRESA FM", "sabor": "CATU C CALABRESA", "tamanho": "FM", "qtd": 19.0, "valor": 2729.25}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 123.0, "valor": 18032.75}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C PRESUNTO FM", "sabor": "CATU C PRESUNTO", "tamanho": "FM", "qtd": 13.25, "valor": 1933.75}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 35.0, "valor": 5067.75}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 25.5, "valor": 3731.75}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 85.25, "valor": 13161.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 11.0, "valor": 1680.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C BACON FM", "sabor": "CATU C BACON", "tamanho": "FM", "qtd": 9.75, "valor": 1603.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHAMPIGNON FM", "sabor": "CHAMPIGNON", "tamanho": "FM", "qtd": 0.5, "valor": 75.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 14.5, "valor": 2214.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 20.0, "valor": 3056.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 33.0, "valor": 5034.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 14.5, "valor": 2202.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOMATE SECO FM", "sabor": "TOMATE SECO", "tamanho": "FM", "qtd": 3.0, "valor": 451.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 24.5, "valor": 4082.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 13.25, "valor": 2254.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CREME CAMARAO FM", "sabor": "CREME CAMARAO", "tamanho": "FM", "qtd": 5.5, "valor": 903.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 4.0, "valor": 676.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 5.0, "valor": 702.25}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 9.5, "valor": 1282.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 5.0, "valor": 681.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 31.5, "valor": 4228.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 4.75, "valor": 644.75}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 10.75, "valor": 1421.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 1.75, "valor": 233.25}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 3.5, "valor": 455.25}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ROMEU JULIETA FM", "sabor": "ROMEU JULIETA", "tamanho": "FM", "qtd": 1.5, "valor": 195.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 6.0, "valor": 903.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 10.75, "valor": 1821.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 8.75, "valor": 1477.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 26.0, "valor": 4328.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM GR", "sabor": "ATUM", "tamanho": "GR", "qtd": 37.5, "valor": 4780.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C ATUM GR", "sabor": "CATU C ATUM", "tamanho": "GR", "qtd": 11.0, "valor": 1398.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C BACON GR", "sabor": "CATU C BACON", "tamanho": "GR", "qtd": 10.5, "valor": 1441.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CALABRESA GR", "sabor": "CATU C CALABRESA", "tamanho": "GR", "qtd": 31.5, "valor": 3709.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 156.5, "valor": 18626.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C PRESUNTO GR", "sabor": "CATU C PRESUNTO", "tamanho": "GR", "qtd": 23.5, "valor": 2780.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 40.5, "valor": 4837.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 283.5, "valor": 34043.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 115.0, "valor": 12665.48}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 89.5, "valor": 11447.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 170.0, "valor": 18950.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 25.5, "valor": 2529.42}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 8.0, "valor": 916.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHAMPIGNON GR", "sabor": "CHAMPIGNON", "tamanho": "GR", "qtd": 24.0, "valor": 1603.87}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 25.0, "valor": 3210.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 18.5, "valor": 2365.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOMATE SECO GR", "sabor": "TOMATE SECO", "tamanho": "GR", "qtd": 6.5, "valor": 821.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 10.5, "valor": 1138.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 14.5, "valor": 1874.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 31.5, "valor": 4101.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 19.0, "valor": 2156.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 6.0, "valor": 833.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 19.5, "valor": 2782.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 32.0, "valor": 4418.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 18.0, "valor": 2336.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 17.0, "valor": 1847.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ROMEU JULIETA GR", "sabor": "ROMEU JULIETA", "tamanho": "GR", "qtd": 9.5, "valor": 728.48}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 3.5, "valor": 384.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 78.0, "valor": 8548.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 4.5, "valor": 486.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 2.0, "valor": 220.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 33.5, "valor": 3722.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 59.5, "valor": 7628.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 51.0, "valor": 6236.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 32.5, "valor": 3879.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "STROGON FRANGO GR", "sabor": "STROGON FRANGO", "tamanho": "GR", "qtd": 44.0, "valor": 3057.26}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 11.0, "valor": 1222.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 12.0, "valor": 1333.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 19.0, "valor": 2627.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CREME CAMARAO GR", "sabor": "CREME CAMARAO", "tamanho": "GR", "qtd": 8.5, "valor": 625.43}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BROCOLIS GR", "sabor": "BROCOLIS", "tamanho": "GR", "qtd": 7.0, "valor": 377.97}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 45.5, "valor": 5861.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 7.5, "valor": 993.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 14.5, "valor": 2040.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 9.5, "valor": 1348.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 36.0, "valor": 4965.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA NEVADA GR", "sabor": "BANANA NEVADA", "tamanho": "GR", "qtd": 0.5, "valor": 56.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "STROGON FRANGO PQ", "sabor": "STROGON FRANGO", "tamanho": "PQ", "qtd": 3.0, "valor": 217.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 22.0, "valor": 1775.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C ATUM PQ", "sabor": "CATU C ATUM", "tamanho": "PQ", "qtd": 4.5, "valor": 361.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C BACON PQ", "sabor": "CATU C BACON", "tamanho": "PQ", "qtd": 0.5, "valor": 43.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CALABRESA PQ", "sabor": "CATU C CALABRESA", "tamanho": "PQ", "qtd": 9.5, "valor": 733.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 41.5, "valor": 3253.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C PRESUNTO PQ", "sabor": "CATU C PRESUNTO", "tamanho": "PQ", "qtd": 4.0, "valor": 315.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 22.5, "valor": 1738.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 68.5, "valor": 5358.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 37.0, "valor": 2659.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 18.5, "valor": 1483.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 52.5, "valor": 4092.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 56.0, "valor": 4054.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 6.5, "valor": 464.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 4.5, "valor": 341.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHAMPIGNON PQ", "sabor": "CHAMPIGNON", "tamanho": "PQ", "qtd": 1.0, "valor": 79.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 4.0, "valor": 317.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 8.0, "valor": 651.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOMATE SECO PQ", "sabor": "TOMATE SECO", "tamanho": "PQ", "qtd": 2.5, "valor": 205.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 2.0, "valor": 143.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 2.0, "valor": 158.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 8.5, "valor": 679.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 3.5, "valor": 265.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TACACA PQ", "sabor": "TACACA", "tamanho": "PQ", "qtd": 1.0, "valor": 86.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 7.0, "valor": 657.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 14.0, "valor": 1238.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 6.5, "valor": 515.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 61.0, "valor": 4427.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 23.0, "valor": 1651.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ROMEU JULIETA PQ", "sabor": "ROMEU JULIETA", "tamanho": "PQ", "qtd": 5.5, "valor": 391.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 6.0, "valor": 435.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 139.5, "valor": 10131.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 14.5, "valor": 1036.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 8.5, "valor": 607.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 9.0, "valor": 702.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 18.5, "valor": 1467.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 14.0, "valor": 1108.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 23.0, "valor": 1649.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 18.5, "valor": 1317.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 2.5, "valor": 215.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CREME CAMARAO PQ", "sabor": "CREME CAMARAO", "tamanho": "PQ", "qtd": 3.5, "valor": 305.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUC C/ TOM CEREJA PQ", "sabor": "RUC C/ TOM CEREJA", "tamanho": "PQ", "qtd": 4.0, "valor": 364.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BROCOLIS PQ", "sabor": "BROCOLIS", "tamanho": "PQ", "qtd": 1.5, "valor": 136.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM LIGHT PQ", "sabor": "ATUM LIGHT", "tamanho": "PQ", "qtd": 5.5, "valor": 500.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ PROMO", "sabor": "BANANA PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANC PQ PROMO", "sabor": "CHOCO BRANC PQ PROMO", "tamanho": "", "qtd": 2.0, "valor": 80.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE LEITE PQ PROMO", "sabor": "DOCE LEITE PQ PROMO", "tamanho": "", "qtd": 2.0, "valor": 80.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 10.0, "valor": 813.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 0.5, "valor": 39.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 2.5, "valor": 219.0}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 2.0, "valor": 178.5}, {"mes": "2025-09", "periodo": "SET25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 10.0, "valor": 908.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - PIZZAS GRANDES", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 291.0, "valor": 35314.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 56.0, "valor": 8328.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 5.0, "valor": 742.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 17.0, "valor": 2912.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 173.25, "valor": 27569.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRICHOSA FM", "sabor": "CAPRICHOSA", "tamanho": "FM", "qtd": 20.25, "valor": 3402.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 28.0, "valor": 4500.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 87.75, "valor": 13180.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 7.5, "valor": 1162.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 9.0, "valor": 1359.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 162.75, "valor": 26103.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 7.5, "valor": 1103.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 32.25, "valor": 5458.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 16.25, "valor": 2943.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 41.5, "valor": 7097.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 114.75, "valor": 18316.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 31.0, "valor": 4922.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 21.5, "valor": 3378.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 62.25, "valor": 10602.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 14.5, "valor": 2456.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 15.75, "valor": 2650.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 12.0, "valor": 2052.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 24.75, "valor": 4260.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 9.75, "valor": 1650.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 29.25, "valor": 5310.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 14.75, "valor": 2700.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 3.5, "valor": 634.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 5.75, "valor": 828.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 8.25, "valor": 1195.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 6.0, "valor": 864.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 24.0, "valor": 3511.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 3.5, "valor": 521.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 12.5, "valor": 1800.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 3.0, "valor": 432.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 3.25, "valor": 468.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 8.5, "valor": 1446.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 11.25, "valor": 2065.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 8.25, "valor": 1503.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 23.75, "valor": 4297.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA NEVADA FM", "sabor": "BANANA NEVADA", "tamanho": "FM", "qtd": 4.25, "valor": 612.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM GR", "sabor": "ATUM", "tamanho": "GR", "qtd": 42.5, "valor": 5809.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 160.0, "valor": 20404.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 37.5, "valor": 4776.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 303.0, "valor": 38730.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 115.0, "valor": 13762.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 98.5, "valor": 13376.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 178.5, "valor": 21120.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 14.0, "valor": 1713.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 16.0, "valor": 1915.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 31.0, "valor": 4217.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 23.0, "valor": 3144.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 7.0, "valor": 826.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 23.5, "valor": 3166.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 37.5, "valor": 5131.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 13.5, "valor": 1630.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 1.5, "valor": 216.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 21.5, "valor": 3173.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 31.5, "valor": 4648.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 37.0, "valor": 5047.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 16.0, "valor": 1862.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 3.5, "valor": 403.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 75.5, "valor": 8952.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 8.0, "valor": 950.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 7.5, "valor": 886.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 24.0, "valor": 2817.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRICHOSA GR", "sabor": "CAPRICHOSA", "tamanho": "GR", "qtd": 27.0, "valor": 3591.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 61.0, "valor": 8242.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 51.0, "valor": 6612.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 36.0, "valor": 4554.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 11.0, "valor": 1278.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 9.0, "valor": 1074.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 17.0, "valor": 2497.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 44.0, "valor": 6026.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 9.5, "valor": 1298.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 19.0, "valor": 2834.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 9.0, "valor": 1338.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 30.5, "valor": 4525.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA NEVADA GR", "sabor": "BANANA NEVADA", "tamanho": "GR", "qtd": 4.5, "valor": 504.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 31.0, "valor": 2623.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 43.0, "valor": 3591.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 19.5, "valor": 1616.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 68.5, "valor": 5715.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 42.5, "valor": 3264.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 20.0, "valor": 1709.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 55.5, "valor": 4575.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 65.0, "valor": 4902.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 4.0, "valor": 308.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 3.5, "valor": 268.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 4.0, "valor": 332.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 8.5, "valor": 717.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 5.0, "valor": 372.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 2.5, "valor": 207.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 11.5, "valor": 984.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 6.0, "valor": 452.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TACACA PQ", "sabor": "TACACA", "tamanho": "PQ", "qtd": 1.5, "valor": 145.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 5.5, "valor": 509.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 8.0, "valor": 745.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 15.0, "valor": 1281.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 58.0, "valor": 4395.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 26.5, "valor": 2004.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 16.0, "valor": 1207.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 144.5, "valor": 10968.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 9.5, "valor": 726.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 7.0, "valor": 520.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 6.5, "valor": 536.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRICHOSA PQ", "sabor": "CAPRICHOSA", "tamanho": "PQ", "qtd": 9.5, "valor": 788.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 12.0, "valor": 1012.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 16.5, "valor": 1396.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 11.0, "valor": 825.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 16.5, "valor": 1243.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 5.5, "valor": 526.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ PROMO", "sabor": "BANANA PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANC PQ PROMO", "sabor": "CHOCO BRANC PQ PROMO", "tamanho": "", "qtd": 2.0, "valor": 80.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 11.0, "valor": 440.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE LEITE PQ PROMO", "sabor": "DOCE LEITE PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 10.5, "valor": 908.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 1.5, "valor": 128.5}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 2.0, "valor": 182.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 3.5, "valor": 327.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 15.5, "valor": 1448.0}, {"mes": "2025-10", "periodo": "OUT25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA NEVADA PQ", "sabor": "BANANA NEVADA", "tamanho": "PQ", "qtd": 10.0, "valor": 740.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - PIZZAS GRANDES", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 356.5, "valor": 41196.7}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 70.75, "valor": 10439.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 7.75, "valor": 1149.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 20.75, "valor": 3584.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 211.75, "valor": 33483.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRICHOSA FM", "sabor": "CAPRICHOSA", "tamanho": "FM", "qtd": 19.25, "valor": 3234.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 34.25, "valor": 5442.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 115.0, "valor": 17138.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 7.0, "valor": 1050.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 10.0, "valor": 1510.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 215.0, "valor": 34003.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 14.25, "valor": 2095.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 31.5, "valor": 5342.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 11.0, "valor": 1993.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 50.0, "valor": 8446.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 131.0, "valor": 20740.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 35.5, "valor": 5585.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 29.25, "valor": 4651.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 70.0, "valor": 11884.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 15.75, "valor": 2654.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 22.25, "valor": 3762.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 16.0, "valor": 2734.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 29.0, "valor": 4949.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 18.75, "valor": 3172.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 33.0, "valor": 5976.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 17.5, "valor": 3172.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 2.25, "valor": 409.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 4.25, "valor": 612.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 6.75, "valor": 979.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 6.75, "valor": 972.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 33.25, "valor": 4864.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 8.0, "valor": 1172.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 14.25, "valor": 2059.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 4.25, "valor": 612.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 2.75, "valor": 396.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 18.5, "valor": 1917.6}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 8.5, "valor": 1543.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 6.5, "valor": 1170.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 17.25, "valor": 3145.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA NEVADA FM", "sabor": "BANANA NEVADA", "tamanho": "FM", "qtd": 7.5, "valor": 1080.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM GR", "sabor": "ATUM", "tamanho": "GR", "qtd": 44.0, "valor": 5989.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 188.5, "valor": 23777.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 38.5, "valor": 4919.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 328.0, "valor": 41380.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 112.0, "valor": 12589.4}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 100.5, "valor": 13626.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 177.5, "valor": 20808.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 44.0, "valor": 4296.1}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 18.5, "valor": 2123.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 31.5, "valor": 4271.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 18.5, "valor": 2500.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 12.5, "valor": 1453.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 20.5, "valor": 2753.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 32.5, "valor": 4413.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 16.5, "valor": 2047.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 1.5, "valor": 230.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 23.5, "valor": 3510.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 27.0, "valor": 3965.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 18.5, "valor": 2493.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 17.5, "valor": 2052.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 2.5, "valor": 296.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 68.5, "valor": 7986.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 8.5, "valor": 986.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 4.5, "valor": 526.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 17.5, "valor": 2046.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRICHOSA GR", "sabor": "CAPRICHOSA", "tamanho": "GR", "qtd": 30.5, "valor": 4056.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 68.0, "valor": 9202.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 70.0, "valor": 8920.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 35.0, "valor": 4385.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 23.0, "valor": 2678.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 9.5, "valor": 1094.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 20.5, "valor": 3008.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 41.5, "valor": 5623.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 21.0, "valor": 2631.7}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 19.5, "valor": 2913.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 10.5, "valor": 1554.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 35.0, "valor": 5236.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA NEVADA GR", "sabor": "BANANA NEVADA", "tamanho": "GR", "qtd": 7.5, "valor": 840.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 25.5, "valor": 2166.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 44.5, "valor": 3665.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 16.5, "valor": 1375.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 59.5, "valor": 4941.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 40.0, "valor": 3007.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 18.0, "valor": 1528.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 57.0, "valor": 4726.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 56.5, "valor": 4303.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 1.5, "valor": 115.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 4.0, "valor": 301.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 11.5, "valor": 968.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 8.0, "valor": 672.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 3.0, "valor": 225.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 4.5, "valor": 389.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 9.0, "valor": 759.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 3.0, "valor": 237.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TACACA PQ", "sabor": "TACACA", "tamanho": "PQ", "qtd": 2.5, "valor": 236.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 8.5, "valor": 785.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 7.5, "valor": 690.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 12.0, "valor": 1004.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 69.0, "valor": 5176.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 23.5, "valor": 1759.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 8.5, "valor": 639.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 160.0, "valor": 12006.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 13.5, "valor": 1003.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 7.5, "valor": 559.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 9.5, "valor": 787.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRICHOSA PQ", "sabor": "CAPRICHOSA", "tamanho": "PQ", "qtd": 5.0, "valor": 415.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 21.0, "valor": 1771.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 12.0, "valor": 994.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 24.0, "valor": 1798.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 16.0, "valor": 1198.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 3.0, "valor": 275.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ PROMO", "sabor": "BANANA PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANC PQ PROMO", "sabor": "CHOCO BRANC PQ PROMO", "tamanho": "", "qtd": 3.0, "valor": 120.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 10.0, "valor": 400.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUAÇU PQ PROMO", "sabor": "CUPUAÇU PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE LEITE PQ PROMO", "sabor": "DOCE LEITE PQ PROMO", "tamanho": "", "qtd": 2.0, "valor": 80.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 11.5, "valor": 968.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 1.0, "valor": 85.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 3.0, "valor": 273.0}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 6.5, "valor": 607.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 8.5, "valor": 793.5}, {"mes": "2025-11", "periodo": "NOV25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA NEVADA PQ", "sabor": "BANANA NEVADA", "tamanho": "PQ", "qtd": 10.5, "valor": 777.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - PIZZAS GRANDES", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 405.5, "valor": 45434.65}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 78.75, "valor": 11656.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 6.0, "valor": 886.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 23.75, "valor": 4070.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 268.25, "valor": 42403.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRICHOSA FM", "sabor": "CAPRICHOSA", "tamanho": "FM", "qtd": 33.5, "valor": 5628.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 47.75, "valor": 7585.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 130.5, "valor": 19506.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 7.5, "valor": 1155.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 21.0, "valor": 3091.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 250.0, "valor": 39631.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 13.75, "valor": 2028.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 35.75, "valor": 6056.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 15.5, "valor": 2803.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 49.75, "valor": 8427.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 161.25, "valor": 25536.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 47.0, "valor": 7376.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 36.0, "valor": 5663.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 86.0, "valor": 14566.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 25.0, "valor": 4216.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 21.75, "valor": 3692.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 20.25, "valor": 3450.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 37.5, "valor": 6401.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 20.25, "valor": 3418.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 36.5, "valor": 6628.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 22.0, "valor": 3991.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 3.25, "valor": 585.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 4.0, "valor": 576.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 5.25, "valor": 763.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 11.25, "valor": 1645.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 43.75, "valor": 6431.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 9.0, "valor": 1322.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 24.25, "valor": 3531.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 3.25, "valor": 468.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 4.0, "valor": 598.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 13.5, "valor": 2272.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 13.75, "valor": 2511.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 9.25, "valor": 1674.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 27.5, "valor": 5013.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA NEVADA FM", "sabor": "BANANA NEVADA", "tamanho": "FM", "qtd": 13.75, "valor": 1980.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM GR", "sabor": "ATUM", "tamanho": "GR", "qtd": 48.5, "valor": 6565.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 195.5, "valor": 24700.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 41.5, "valor": 5232.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 308.0, "valor": 38651.6}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 145.5, "valor": 15252.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 102.0, "valor": 13841.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 213.0, "valor": 25059.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 77.5, "valor": 6793.4}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 24.0, "valor": 2789.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 37.0, "valor": 4997.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 19.0, "valor": 2603.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 9.0, "valor": 1035.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 23.0, "valor": 3092.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 35.0, "valor": 4746.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 12.5, "valor": 1468.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 4.0, "valor": 590.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 27.5, "valor": 4128.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 28.5, "valor": 4188.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 25.5, "valor": 3459.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 9.0, "valor": 1051.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 5.0, "valor": 590.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 70.5, "valor": 8145.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 7.5, "valor": 853.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 10.5, "valor": 998.6}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 32.5, "valor": 3826.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRICHOSA GR", "sabor": "CAPRICHOSA", "tamanho": "GR", "qtd": 27.0, "valor": 3591.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 68.0, "valor": 9204.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 63.5, "valor": 8086.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 34.0, "valor": 4229.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 17.5, "valor": 1997.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 14.5, "valor": 1654.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 18.0, "valor": 2613.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 49.0, "valor": 6680.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 21.5, "valor": 2792.3}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 16.5, "valor": 2378.9}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 9.0, "valor": 1310.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 32.5, "valor": 4904.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA NEVADA GR", "sabor": "BANANA NEVADA", "tamanho": "GR", "qtd": 16.0, "valor": 1792.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 24.0, "valor": 2030.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 33.5, "valor": 2748.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 14.0, "valor": 1162.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 65.5, "valor": 5420.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 38.0, "valor": 2872.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 25.0, "valor": 2111.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 53.0, "valor": 4366.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 49.0, "valor": 3693.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 2.0, "valor": 146.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 8.0, "valor": 600.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 7.0, "valor": 591.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 9.0, "valor": 761.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 3.5, "valor": 265.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 3.5, "valor": 294.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 6.5, "valor": 557.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 14.0, "valor": 1087.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 9.0, "valor": 841.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 11.0, "valor": 1009.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 8.0, "valor": 676.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 70.5, "valor": 5275.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 21.5, "valor": 1607.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 10.5, "valor": 779.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 167.5, "valor": 12547.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 12.0, "valor": 894.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 11.5, "valor": 857.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 11.0, "valor": 899.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRICHOSA PQ", "sabor": "CAPRICHOSA", "tamanho": "PQ", "qtd": 5.0, "valor": 415.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 27.0, "valor": 2263.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 10.5, "valor": 866.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 19.0, "valor": 1424.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 27.0, "valor": 2014.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 3.0, "valor": 277.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ PROMO", "sabor": "ABACAXI PQ PROMO", "tamanho": "", "qtd": 2.0, "valor": 80.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ PROMO", "sabor": "BANANA PQ PROMO", "tamanho": "", "qtd": 2.0, "valor": 80.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANC PQ PROMO", "sabor": "CHOCO BRANC PQ PROMO", "tamanho": "", "qtd": 4.0, "valor": 160.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 6.0, "valor": 240.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE LEITE PQ PROMO", "sabor": "DOCE LEITE PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 9.0, "valor": 761.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 5.5, "valor": 468.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 4.0, "valor": 372.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 2.0, "valor": 184.0}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 20.5, "valor": 1901.5}, {"mes": "2025-12", "periodo": "DEZ25", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA NEVADA PQ", "sabor": "BANANA NEVADA", "tamanho": "PQ", "qtd": 21.5, "valor": 1591.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - PIZZAS GRANDES", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 357.0, "valor": 40296.8}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 54.0, "valor": 7964.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 6.75, "valor": 1020.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 20.25, "valor": 3463.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 213.0, "valor": 33771.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRICHOSA FM", "sabor": "CAPRICHOSA", "tamanho": "FM", "qtd": 28.5, "valor": 4788.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 49.5, "valor": 7893.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 93.75, "valor": 13978.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 13.75, "valor": 2124.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 6.75, "valor": 981.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 180.583, "valor": 28567.44}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 9.25, "valor": 1361.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 27.5, "valor": 4674.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 12.75, "valor": 2299.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 45.25, "valor": 7646.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 111.25, "valor": 17590.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 29.5, "valor": 4636.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 30.0, "valor": 4714.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 76.584, "valor": 13015.11}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 17.75, "valor": 2994.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 18.083, "valor": 3057.94}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 13.75, "valor": 2326.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 21.25, "valor": 3620.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 16.5, "valor": 2784.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 31.0, "valor": 5580.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 11.5, "valor": 2079.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 4.25, "valor": 778.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 3.25, "valor": 468.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 4.75, "valor": 691.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 6.25, "valor": 916.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 31.75, "valor": 4608.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 7.5, "valor": 1083.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 16.25, "valor": 2366.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 4.25, "valor": 628.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 2.75, "valor": 396.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 9.25, "valor": 1572.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 14.5, "valor": 2655.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 11.5, "valor": 2097.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 24.25, "valor": 4401.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA NEVADA FM", "sabor": "BANANA NEVADA", "tamanho": "FM", "qtd": 9.75, "valor": 1404.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM GR", "sabor": "ATUM", "tamanho": "GR", "qtd": 47.5, "valor": 6484.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 162.5, "valor": 20426.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 48.0, "valor": 6101.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 331.5, "valor": 38897.4}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 141.0, "valor": 14268.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 84.0, "valor": 11371.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 170.0, "valor": 19921.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 83.0, "valor": 6822.8}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 16.0, "valor": 1900.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 31.0, "valor": 4180.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 20.5, "valor": 2809.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 12.0, "valor": 1438.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 12.0, "valor": 1611.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 29.0, "valor": 3942.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 11.0, "valor": 1308.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 6.0, "valor": 871.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 23.5, "valor": 3447.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 37.0, "valor": 5475.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 16.5, "valor": 2234.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 8.0, "valor": 946.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 4.0, "valor": 461.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 65.0, "valor": 7592.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 8.0, "valor": 907.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 11.5, "valor": 1038.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 19.5, "valor": 2260.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRICHOSA GR", "sabor": "CAPRICHOSA", "tamanho": "GR", "qtd": 23.5, "valor": 3125.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 50.5, "valor": 6843.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 64.5, "valor": 8206.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 31.0, "valor": 3888.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 14.0, "valor": 1655.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 10.0, "valor": 1135.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 11.0, "valor": 1605.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 37.0, "valor": 4981.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 20.5, "valor": 2333.7}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 16.0, "valor": 2131.6}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 9.5, "valor": 1389.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 40.0, "valor": 5998.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA NEVADA GR", "sabor": "BANANA NEVADA", "tamanho": "GR", "qtd": 14.5, "valor": 1624.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 21.0, "valor": 1787.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 37.5, "valor": 3104.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 25.5, "valor": 2116.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 61.5, "valor": 5099.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 33.5, "valor": 2514.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 23.5, "valor": 1992.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 59.0, "valor": 4864.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 52.0, "valor": 3919.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 2.0, "valor": 146.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 5.0, "valor": 371.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 14.5, "valor": 1241.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 5.0, "valor": 431.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 0.5, "valor": 43.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 6.0, "valor": 502.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 8.5, "valor": 719.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 17.5, "valor": 1321.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TACACA PQ", "sabor": "TACACA", "tamanho": "PQ", "qtd": 3.0, "valor": 282.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 7.0, "valor": 653.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 12.0, "valor": 1100.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 10.0, "valor": 854.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 73.0, "valor": 5480.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 19.0, "valor": 1424.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 7.0, "valor": 522.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 155.0, "valor": 11632.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 17.5, "valor": 1305.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 8.0, "valor": 596.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 6.0, "valor": 494.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRICHOSA PQ", "sabor": "CAPRICHOSA", "tamanho": "PQ", "qtd": 6.0, "valor": 498.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 15.5, "valor": 1314.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 13.5, "valor": 1125.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 18.0, "valor": 1344.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 23.5, "valor": 1753.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 3.5, "valor": 320.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 8.0, "valor": 320.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 11.0, "valor": 931.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 5.5, "valor": 468.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 4.5, "valor": 415.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 4.5, "valor": 415.5}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 16.0, "valor": 1478.0}, {"mes": "2026-01", "periodo": "JAN26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA NEVADA PQ", "sabor": "BANANA NEVADA", "tamanho": "PQ", "qtd": 18.5, "valor": 1369.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - PIZZAS GRANDES", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 299.5, "valor": 34193.6}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 38.25, "valor": 5645.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 1.75, "valor": 261.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 14.5, "valor": 2484.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 155.25, "valor": 24546.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRICHOSA FM", "sabor": "CAPRICHOSA", "tamanho": "FM", "qtd": 23.0, "valor": 3864.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 40.5, "valor": 6495.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 74.25, "valor": 10981.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 6.75, "valor": 981.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 5.75, "valor": 828.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 143.0, "valor": 22595.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 11.25, "valor": 1663.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 25.25, "valor": 4268.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 9.0, "valor": 1624.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 42.25, "valor": 7154.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 94.5, "valor": 14912.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 18.25, "valor": 2861.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 25.0, "valor": 3949.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 54.75, "valor": 9287.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 9.5, "valor": 1600.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 20.5, "valor": 3490.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 13.75, "valor": 2338.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 18.0, "valor": 3060.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 12.25, "valor": 2076.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 24.5, "valor": 4432.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 15.25, "valor": 2781.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 2.75, "valor": 495.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 5.5, "valor": 814.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 4.0, "valor": 576.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 6.25, "valor": 900.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 18.0, "valor": 2595.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 5.0, "valor": 733.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 15.5, "valor": 2258.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 2.5, "valor": 360.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 0.5, "valor": 72.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 5.75, "valor": 978.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 6.5, "valor": 1174.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 4.5, "valor": 814.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 20.75, "valor": 3793.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA NEVADA FM", "sabor": "BANANA NEVADA", "tamanho": "FM", "qtd": 6.5, "valor": 936.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM GR", "sabor": "ATUM", "tamanho": "GR", "qtd": 49.0, "valor": 6659.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 143.5, "valor": 18051.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 30.0, "valor": 3772.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 297.0, "valor": 34578.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 118.0, "valor": 12403.1}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 77.0, "valor": 10421.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 145.0, "valor": 16972.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 64.0, "valor": 5052.4}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 12.0, "valor": 1396.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 29.0, "valor": 3917.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 21.0, "valor": 2847.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 8.5, "valor": 984.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 16.0, "valor": 2143.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 32.5, "valor": 4416.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 10.5, "valor": 1275.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 4.0, "valor": 576.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 19.5, "valor": 2871.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 23.5, "valor": 3468.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 18.0, "valor": 2421.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 10.0, "valor": 1175.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 2.5, "valor": 296.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 71.5, "valor": 8348.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 4.5, "valor": 532.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 6.5, "valor": 482.1}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 35.5, "valor": 4134.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRICHOSA GR", "sabor": "CAPRICHOSA", "tamanho": "GR", "qtd": 22.5, "valor": 2992.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 53.0, "valor": 7139.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 55.0, "valor": 7019.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 28.0, "valor": 3521.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 15.5, "valor": 1786.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 10.5, "valor": 1199.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 6.5, "valor": 964.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 37.5, "valor": 5099.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 14.5, "valor": 1508.9}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 12.5, "valor": 1389.4}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 8.0, "valor": 1180.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 28.0, "valor": 4130.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA NEVADA GR", "sabor": "BANANA NEVADA", "tamanho": "GR", "qtd": 11.5, "valor": 1288.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 21.0, "valor": 1781.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 32.5, "valor": 2693.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 19.0, "valor": 1566.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 51.5, "valor": 4253.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 34.5, "valor": 2633.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 15.0, "valor": 1265.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 44.0, "valor": 3627.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 43.5, "valor": 3288.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 5.5, "valor": 415.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 1.5, "valor": 109.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 8.0, "valor": 674.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 9.0, "valor": 753.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 2.0, "valor": 149.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 3.5, "valor": 294.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 7.0, "valor": 603.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 7.5, "valor": 577.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TACACA PQ", "sabor": "TACACA", "tamanho": "PQ", "qtd": 1.5, "valor": 136.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 5.0, "valor": 461.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 6.0, "valor": 550.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 10.0, "valor": 840.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 60.0, "valor": 4478.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 18.5, "valor": 1381.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 9.0, "valor": 670.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 129.5, "valor": 9687.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 6.5, "valor": 483.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 12.5, "valor": 939.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 6.5, "valor": 534.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRICHOSA PQ", "sabor": "CAPRICHOSA", "tamanho": "PQ", "qtd": 7.5, "valor": 622.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 16.0, "valor": 1354.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 15.0, "valor": 1245.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 17.0, "valor": 1264.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 28.0, "valor": 2098.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 2.0, "valor": 186.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ PROMO", "sabor": "ABACAXI PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ PROMO", "sabor": "BANANA PQ PROMO", "tamanho": "", "qtd": 10.0, "valor": 400.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANC PQ PROMO", "sabor": "CHOCO BRANC PQ PROMO", "tamanho": "", "qtd": 2.0, "valor": 80.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 16.0, "valor": 640.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE LEITE PQ PROMO", "sabor": "DOCE LEITE PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 12.5, "valor": 1087.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 3.5, "valor": 300.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 6.0, "valor": 552.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 1.0, "valor": 93.0}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 17.5, "valor": 1616.5}, {"mes": "2026-02", "periodo": "FEV26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA NEVADA PQ", "sabor": "BANANA NEVADA", "tamanho": "PQ", "qtd": 24.0, "valor": 1776.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - PIZZAS GRANDES", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 316.5, "valor": 36348.9}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 43.25, "valor": 6396.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 5.25, "valor": 766.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 12.0, "valor": 2048.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 162.5, "valor": 25671.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRICHOSA FM", "sabor": "CAPRICHOSA", "tamanho": "FM", "qtd": 23.25, "valor": 3906.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 31.5, "valor": 5054.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 80.75, "valor": 11978.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 6.0, "valor": 925.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 8.5, "valor": 1294.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 156.75, "valor": 24867.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 9.75, "valor": 1447.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 24.5, "valor": 4164.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 8.0, "valor": 1449.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 31.25, "valor": 5341.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 102.5, "valor": 16221.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 23.5, "valor": 3733.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 22.5, "valor": 3540.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 58.0, "valor": 9886.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 9.75, "valor": 1660.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 20.0, "valor": 3397.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 15.5, "valor": 2626.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 22.0, "valor": 3753.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 12.0, "valor": 2020.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 25.25, "valor": 4603.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 14.5, "valor": 2641.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 4.25, "valor": 778.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 2.5, "valor": 360.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 3.0, "valor": 432.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 6.75, "valor": 972.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 20.75, "valor": 2988.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 2.75, "valor": 396.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 6.75, "valor": 972.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 1.25, "valor": 180.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 3.25, "valor": 468.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 6.25, "valor": 1072.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 5.75, "valor": 1035.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 5.75, "valor": 1044.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 28.75, "valor": 5251.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMÍLIA", "material": "BANANA NEVADA FM", "sabor": "BANANA NEVADA", "tamanho": "FM", "qtd": 4.5, "valor": 648.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ATUM GR", "sabor": "ATUM", "tamanho": "GR", "qtd": 58.5, "valor": 7971.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 164.5, "valor": 20716.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 35.0, "valor": 4441.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 311.0, "valor": 36886.4}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 115.5, "valor": 12606.8}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 90.0, "valor": 12229.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 161.0, "valor": 18932.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 48.0, "valor": 4142.6}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 12.0, "valor": 1425.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 24.5, "valor": 3325.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 21.5, "valor": 2917.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 5.5, "valor": 616.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 16.0, "valor": 2146.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 45.5, "valor": 6172.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 17.0, "valor": 2128.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 6.5, "valor": 936.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 18.5, "valor": 2720.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 31.0, "valor": 4562.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 16.5, "valor": 2212.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 15.5, "valor": 1780.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 1.5, "valor": 170.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 75.5, "valor": 8836.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 8.5, "valor": 996.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 7.5, "valor": 537.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 27.0, "valor": 3167.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRICHOSA GR", "sabor": "CAPRICHOSA", "tamanho": "GR", "qtd": 27.0, "valor": 3591.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 52.5, "valor": 7072.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 49.0, "valor": 6303.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 39.0, "valor": 4896.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 8.5, "valor": 1023.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 5.0, "valor": 598.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 13.5, "valor": 1993.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 40.0, "valor": 5452.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 17.0, "valor": 1939.9}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 15.0, "valor": 1946.6}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 10.5, "valor": 1575.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 39.0, "valor": 5784.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA NEVADA GR", "sabor": "BANANA NEVADA", "tamanho": "GR", "qtd": 12.0, "valor": 1344.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 19.0, "valor": 1613.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 35.0, "valor": 2887.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 19.5, "valor": 1616.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 58.5, "valor": 4840.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 37.5, "valor": 2851.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 14.0, "valor": 1188.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 47.0, "valor": 3879.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 51.0, "valor": 3851.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 7.5, "valor": 559.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 6.5, "valor": 487.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 8.5, "valor": 733.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 10.0, "valor": 848.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 2.0, "valor": 146.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 5.5, "valor": 462.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 7.0, "valor": 589.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 11.0, "valor": 829.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TACACA PQ", "sabor": "TACACA", "tamanho": "PQ", "qtd": 3.5, "valor": 323.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 10.0, "valor": 930.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 10.0, "valor": 920.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 7.5, "valor": 630.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 59.0, "valor": 4416.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 15.5, "valor": 1161.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 14.5, "valor": 1083.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 152.5, "valor": 11429.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 15.0, "valor": 1120.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 4.5, "valor": 335.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 7.5, "valor": 607.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRICHOSA PQ", "sabor": "CAPRICHOSA", "tamanho": "PQ", "qtd": 8.0, "valor": 664.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 14.0, "valor": 1186.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 17.0, "valor": 1411.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 21.0, "valor": 1574.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 27.5, "valor": 2053.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 2.0, "valor": 182.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ PROMO", "sabor": "ABACAXI PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ PROMO", "sabor": "BANANA PQ PROMO", "tamanho": "", "qtd": 4.0, "valor": 160.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANC PQ PROMO", "sabor": "CHOCO BRANC PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 15.0, "valor": 600.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 9.5, "valor": 816.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 4.5, "valor": 381.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 3.5, "valor": 320.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 2.5, "valor": 231.5}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 22.0, "valor": 2030.0}, {"mes": "2026-03", "periodo": "MAR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA NEVADA PQ", "sabor": "BANANA NEVADA", "tamanho": "PQ", "qtd": 20.5, "valor": 1517.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "E.2.2 - pizza grande", "material": "CALABRESA GR", "sabor": "CALABRESA", "tamanho": "GR", "qtd": 305.0, "valor": 35282.7}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "MUSSARELA FM", "sabor": "MUSSARELA", "tamanho": "FM", "qtd": 46.5, "valor": 6918.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "AMAZONICA FM", "sabor": "AMAZONICA", "tamanho": "FM", "qtd": 5.75, "valor": 869.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "CABOQUINHA FM", "sabor": "CABOQUINHA", "tamanho": "FM", "qtd": 20.25, "valor": 3492.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "CALABRESA FM", "sabor": "CALABRESA", "tamanho": "FM", "qtd": 194.25, "valor": 30587.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "CAPRICHOSA FM", "sabor": "CAPRICHOSA", "tamanho": "FM", "qtd": 22.5, "valor": 3780.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "GARANTIDA FM", "sabor": "GARANTIDA", "tamanho": "FM", "qtd": 41.75, "valor": 6582.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "MARGUERITA FM", "sabor": "MARGUERITA", "tamanho": "FM", "qtd": 91.25, "valor": 13454.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "MUSSA C ALHO FM", "sabor": "MUSSA C ALHO", "tamanho": "FM", "qtd": 5.75, "valor": 854.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "NAPOLITANA FM", "sabor": "NAPOLITANA", "tamanho": "FM", "qtd": 12.25, "valor": 1882.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "PORTUGUESA FM", "sabor": "PORTUGUESA", "tamanho": "FM", "qtd": 173.0, "valor": 27265.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "PRESUNTO FM", "sabor": "PRESUNTO", "tamanho": "FM", "qtd": 8.5, "valor": 1243.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "ATUM FM", "sabor": "ATUM", "tamanho": "FM", "qtd": 34.25, "valor": 5820.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "CABOCA PAVULA FM", "sabor": "CABOCA PAVULA", "tamanho": "FM", "qtd": 9.75, "valor": 1773.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "CARNE DE SOL FM", "sabor": "CARNE DE SOL", "tamanho": "FM", "qtd": 46.25, "valor": 7896.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "CATU C FRANGO FM", "sabor": "CATU C FRANGO", "tamanho": "FM", "qtd": 116.5, "valor": 18408.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "ESTROGON DE CARNE FM", "sabor": "ESTROGON DE CARNE", "tamanho": "FM", "qtd": 25.5, "valor": 3853.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "LOPPICANTE FM", "sabor": "LOPPICANTE", "tamanho": "FM", "qtd": 24.25, "valor": 3834.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "4 QUEIJOS FM", "sabor": "4 QUEIJOS", "tamanho": "FM", "qtd": 78.0, "valor": 13269.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "BACON FM", "sabor": "BACON", "tamanho": "FM", "qtd": 12.75, "valor": 2154.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "LOPPIANO FM", "sabor": "LOPPIANO", "tamanho": "FM", "qtd": 19.75, "valor": 3326.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "PALMITO FM", "sabor": "PALMITO", "tamanho": "FM", "qtd": 16.0, "valor": 2712.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "PEPPERONI FM", "sabor": "PEPPERONI", "tamanho": "FM", "qtd": 25.75, "valor": 4384.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "RUCULA C TOMATE FM", "sabor": "RUCULA C TOMATE", "tamanho": "FM", "qtd": 12.75, "valor": 2170.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "CAMARAO FM", "sabor": "CAMARAO", "tamanho": "FM", "qtd": 22.75, "valor": 4113.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "CATU C CAMARAO FM", "sabor": "CATU C CAMARAO", "tamanho": "FM", "qtd": 17.25, "valor": 3136.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "TACACA FM", "sabor": "TACACA", "tamanho": "FM", "qtd": 3.75, "valor": 679.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "ABACAXI FM", "sabor": "ABACAXI", "tamanho": "FM", "qtd": 4.0, "valor": 576.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "BANANA FM", "sabor": "BANANA", "tamanho": "FM", "qtd": 1.25, "valor": 180.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "BANANA FRITA FM", "sabor": "BANANA FRITA", "tamanho": "FM", "qtd": 2.25, "valor": 324.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "CHOCOLATE FM", "sabor": "CHOCOLATE", "tamanho": "FM", "qtd": 22.5, "valor": 3240.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "CHOCO BRANCO FM", "sabor": "CHOCO BRANCO", "tamanho": "FM", "qtd": 4.25, "valor": 612.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "CHOCO M&M FM", "sabor": "CHOCO M&M", "tamanho": "FM", "qtd": 9.0, "valor": 1296.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "CUPUACU FM", "sabor": "CUPUACU", "tamanho": "FM", "qtd": 0.75, "valor": 108.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "DOCE DE LEITE FM", "sabor": "DOCE DE LEITE", "tamanho": "FM", "qtd": 3.75, "valor": 540.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "TOSCANA ARGENTINA FM", "sabor": "TOSCANA ARGENTINA", "tamanho": "FM", "qtd": 4.75, "valor": 802.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "LOMBO CANADENSE FM", "sabor": "LOMBO CANADENSE", "tamanho": "FM", "qtd": 4.75, "valor": 864.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "BACON CARAMELIZADO FM", "sabor": "BACON CARAMELIZADO", "tamanho": "FM", "qtd": 7.25, "valor": 1309.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "CAPRESE VEGETARIANA FM", "sabor": "CAPRESE VEGETARIANA", "tamanho": "FM", "qtd": 25.75, "valor": 4689.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Família", "grupo_raw": "Z - PIZZA FAMILIA", "material": "BANANA NEVADA FM", "sabor": "BANANA NEVADA", "tamanho": "FM", "qtd": 10.75, "valor": 1548.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "atum gr", "sabor": "atum gr", "tamanho": "", "qtd": 56.5, "valor": 7647.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C FRANGO GR", "sabor": "CATU C FRANGO", "tamanho": "GR", "qtd": 175.0, "valor": 22109.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPICANTE GR", "sabor": "LOPPICANTE", "tamanho": "GR", "qtd": 37.0, "valor": 4700.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PORTUGUESA GR", "sabor": "PORTUGUESA", "tamanho": "GR", "qtd": 304.0, "valor": 37127.9}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSARELA GR", "sabor": "MUSSARELA", "tamanho": "GR", "qtd": 117.0, "valor": 12738.7}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "4 QUEIJOS GR", "sabor": "4 QUEIJOS", "tamanho": "GR", "qtd": 91.5, "valor": 12401.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MARGUERITA GR", "sabor": "MARGUERITA", "tamanho": "GR", "qtd": 180.5, "valor": 21032.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "NAPOLITANA GR", "sabor": "NAPOLITANA", "tamanho": "GR", "qtd": 45.5, "valor": 4431.7}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PRESUNTO GR", "sabor": "PRESUNTO", "tamanho": "GR", "qtd": 17.5, "valor": 2051.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOPPIANO GR", "sabor": "LOPPIANO", "tamanho": "GR", "qtd": 34.5, "valor": 4661.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PALMITO GR", "sabor": "PALMITO", "tamanho": "GR", "qtd": 22.5, "valor": 3022.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "AMAZONICA GR", "sabor": "AMAZONICA", "tamanho": "GR", "qtd": 8.5, "valor": 1046.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON GR", "sabor": "BACON", "tamanho": "GR", "qtd": 23.5, "valor": 3149.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOQUINHA GR", "sabor": "CABOQUINHA", "tamanho": "GR", "qtd": 41.5, "valor": 5625.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "MUSSA C ALHO GR", "sabor": "MUSSA C ALHO", "tamanho": "GR", "qtd": 14.0, "valor": 1690.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TACACA GR", "sabor": "TACACA", "tamanho": "GR", "qtd": 5.0, "valor": 720.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CATU C CAMARAO GR", "sabor": "CATU C CAMARAO", "tamanho": "GR", "qtd": 26.0, "valor": 3793.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAMARAO GR", "sabor": "CAMARAO", "tamanho": "GR", "qtd": 36.5, "valor": 5396.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "RUCULA C TOMATE GR", "sabor": "RUCULA C TOMATE", "tamanho": "GR", "qtd": 28.0, "valor": 3766.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA GR", "sabor": "BANANA", "tamanho": "GR", "qtd": 13.0, "valor": 1498.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CUPUACU GR", "sabor": "CUPUACU", "tamanho": "GR", "qtd": 4.0, "valor": 477.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCOLATE GR", "sabor": "CHOCOLATE", "tamanho": "GR", "qtd": 71.5, "valor": 8412.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ABACAXI GR", "sabor": "ABACAXI", "tamanho": "GR", "qtd": 9.5, "valor": 1091.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "DOCE DE LEITE GR", "sabor": "DOCE DE LEITE", "tamanho": "GR", "qtd": 4.0, "valor": 412.9}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO M&M GR", "sabor": "CHOCO M&M", "tamanho": "GR", "qtd": 27.5, "valor": 3119.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRICHOSA GR", "sabor": "CAPRICHOSA", "tamanho": "GR", "qtd": 27.5, "valor": 3657.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CARNE DE SOL GR", "sabor": "CARNE DE SOL", "tamanho": "GR", "qtd": 63.0, "valor": 8460.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "GARANTIDA GR", "sabor": "GARANTIDA", "tamanho": "GR", "qtd": 65.5, "valor": 8360.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "ESTROGON DE CARNE GR", "sabor": "ESTROGON DE CARNE", "tamanho": "GR", "qtd": 27.5, "valor": 3319.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CHOCO BRANCO GR", "sabor": "CHOCO BRANCO", "tamanho": "GR", "qtd": 8.5, "valor": 978.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA FRITA GR", "sabor": "BANANA FRITA", "tamanho": "GR", "qtd": 14.5, "valor": 1708.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CABOCA PAVULA GR", "sabor": "CABOCA PAVULA", "tamanho": "GR", "qtd": 16.5, "valor": 2390.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "PEPPERONI GR", "sabor": "PEPPERONI", "tamanho": "GR", "qtd": 40.5, "valor": 5489.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "TOSCANA ARGENTINA GR", "sabor": "TOSCANA ARGENTINA", "tamanho": "GR", "qtd": 17.5, "valor": 2063.9}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "LOMBO CANADENSE GR", "sabor": "LOMBO CANADENSE", "tamanho": "GR", "qtd": 11.0, "valor": 1537.8}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BACON CARAMELIZADO GR", "sabor": "BACON CARAMELIZADO", "tamanho": "GR", "qtd": 11.0, "valor": 1633.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "CAPRESE VEGETARIANA GR", "sabor": "CAPRESE VEGETARIANA", "tamanho": "GR", "qtd": 36.0, "valor": 5352.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizzas Grandes", "grupo_raw": "Z - PIZZA GRANDE", "material": "BANANA NEVADA GR", "sabor": "BANANA NEVADA", "tamanho": "GR", "qtd": 17.0, "valor": 1904.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ATUM PQ", "sabor": "ATUM", "tamanho": "PQ", "qtd": 21.5, "valor": 1832.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C FRANGO PQ", "sabor": "CATU C FRANGO", "tamanho": "PQ", "qtd": 37.0, "valor": 3061.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPICANTE PQ", "sabor": "LOPPICANTE", "tamanho": "PQ", "qtd": 9.5, "valor": 788.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PORTUGUESA PQ", "sabor": "PORTUGUESA", "tamanho": "PQ", "qtd": 56.5, "valor": 4655.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSARELA PQ", "sabor": "MUSSARELA", "tamanho": "PQ", "qtd": 40.0, "valor": 3026.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "4 QUEIJOS PQ", "sabor": "4 QUEIJOS", "tamanho": "PQ", "qtd": 26.0, "valor": 2192.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CALABRESA PQ", "sabor": "CALABRESA", "tamanho": "PQ", "qtd": 54.5, "valor": 4505.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MARGUERITA PQ", "sabor": "MARGUERITA", "tamanho": "PQ", "qtd": 56.0, "valor": 4244.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "NAPOLITANA PQ", "sabor": "NAPOLITANA", "tamanho": "PQ", "qtd": 6.0, "valor": 461.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PRESUNTO PQ", "sabor": "PRESUNTO", "tamanho": "PQ", "qtd": 6.0, "valor": 455.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOPPIANO PQ", "sabor": "LOPPIANO", "tamanho": "PQ", "qtd": 12.5, "valor": 1059.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PALMITO PQ", "sabor": "PALMITO", "tamanho": "PQ", "qtd": 8.0, "valor": 672.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "AMAZONICA PQ", "sabor": "AMAZONICA", "tamanho": "PQ", "qtd": 1.0, "valor": 74.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON PQ", "sabor": "BACON", "tamanho": "PQ", "qtd": 3.0, "valor": 255.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOQUINHA PQ", "sabor": "CABOQUINHA", "tamanho": "PQ", "qtd": 13.0, "valor": 1091.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "MUSSA C ALHO PQ", "sabor": "MUSSA C ALHO", "tamanho": "PQ", "qtd": 4.5, "valor": 343.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TACACA PQ", "sabor": "TACACA", "tamanho": "PQ", "qtd": 2.5, "valor": 227.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CATU C CAMARAO PQ", "sabor": "CATU C CAMARAO", "tamanho": "PQ", "qtd": 8.5, "valor": 785.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAMARAO PQ", "sabor": "CAMARAO", "tamanho": "PQ", "qtd": 11.5, "valor": 1046.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "RUCULA C TOMATE PQ", "sabor": "RUCULA C TOMATE", "tamanho": "PQ", "qtd": 7.0, "valor": 581.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO M&M PQ", "sabor": "CHOCO M&M", "tamanho": "PQ", "qtd": 65.5, "valor": 4893.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ", "sabor": "BANANA", "tamanho": "PQ", "qtd": 15.5, "valor": 1161.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUACU PQ", "sabor": "CUPUACU", "tamanho": "PQ", "qtd": 11.0, "valor": 744.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ", "sabor": "CHOCOLATE", "tamanho": "PQ", "qtd": 146.0, "valor": 10910.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ", "sabor": "ABACAXI", "tamanho": "PQ", "qtd": 15.5, "valor": 1147.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "DOCE DE LEITE PQ", "sabor": "DOCE DE LEITE", "tamanho": "PQ", "qtd": 11.5, "valor": 707.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ESTROGON DE CARNE PQ", "sabor": "ESTROGON DE CARNE", "tamanho": "PQ", "qtd": 5.5, "valor": 449.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRICHOSA PQ", "sabor": "CAPRICHOSA", "tamanho": "PQ", "qtd": 9.0, "valor": 747.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CARNE DE SOL PQ", "sabor": "CARNE DE SOL", "tamanho": "PQ", "qtd": 23.0, "valor": 1923.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "GARANTIDA PQ", "sabor": "GARANTIDA", "tamanho": "PQ", "qtd": 12.0, "valor": 1001.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANCO PQ", "sabor": "CHOCO BRANCO", "tamanho": "PQ", "qtd": 22.5, "valor": 1685.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA FRITA PQ", "sabor": "BANANA FRITA", "tamanho": "PQ", "qtd": 17.0, "valor": 1270.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CABOCA PAVULA PQ", "sabor": "CABOCA PAVULA", "tamanho": "PQ", "qtd": 4.5, "valor": 413.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "ABACAXI PQ PROMO", "sabor": "ABACAXI PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA PQ PROMO", "sabor": "BANANA PQ PROMO", "tamanho": "", "qtd": 1.0, "valor": 40.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCO BRANC PQ PROMO", "sabor": "CHOCO BRANC PQ PROMO", "tamanho": "", "qtd": 3.0, "valor": 120.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CHOCOLATE PQ PROMO", "sabor": "CHOCOLATE PQ PROMO", "tamanho": "", "qtd": 8.0, "valor": 320.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CUPUAÇU PQ PROMO", "sabor": "CUPUAÇU PQ PROMO", "tamanho": "", "qtd": 4.0, "valor": 160.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "PEPPERONI PQ", "sabor": "PEPPERONI", "tamanho": "PQ", "qtd": 13.0, "valor": 1097.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "TOSCANA ARGENTINA PQ", "sabor": "TOSCANA ARGENTINA", "tamanho": "PQ", "qtd": 5.0, "valor": 427.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "LOMBO CANADENSE PQ", "sabor": "LOMBO CANADENSE", "tamanho": "PQ", "qtd": 2.5, "valor": 227.5}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BACON CARAMELIZADO PQ", "sabor": "BACON CARAMELIZADO", "tamanho": "PQ", "qtd": 2.0, "valor": 182.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "CAPRESE VEGETARIANA PQ", "sabor": "CAPRESE VEGETARIANA", "tamanho": "PQ", "qtd": 15.0, "valor": 1391.0}, {"mes": "2026-04", "periodo": "ABR26", "grupo": "Pizza Pequena", "grupo_raw": "Z - PIZZA PEQUENA", "material": "BANANA NEVADA PQ", "sabor": "BANANA NEVADA", "tamanho": "PQ", "qtd": 17.5, "valor": 1295.0}];
+ if (!box || resumo.length < 2) {
+ if (box) box.innerHTML = '<p>Dados insuficientes.</p>'
+ return
+ }
 
-const round2=v=>Math.round(v*100)/100;
-const mfmt=v=>'R$'+Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});
-const mfmtK=v=>{const n=Number(v||0);return n>=1000?'R$'+(n/1000).toFixed(0)+'k':mfmt(v);};
-const mfmtD=v=>{const n=Number(v||0);return(n>=0?'+':'')+mfmt(n);};
-let mMetasSel='2026-04',mCH={},crescTamFilter='';
+ const ordenado = [...resumo].sort((a, b) => periodoParaOrdem(a.periodo) - periodoParaOrdem(b.periodo))
+ const atual = ordenado.at(-1)
+ const anterior = ordenado.at(-2)
 
-function mdc(id){if(mCH[id]){mCH[id].destroy();delete mCH[id];}};
-function mGetDias(m){return METAS_DAILY.filter(d=>d.mes===m&&d.fat_total>0).sort((a,b)=>a.data.localeCompare(b.data));}
-function mGetSum(m){return METAS_MONTHLY.find(x=>x.mes===m)||{};}
-function mdl(d){return d.data.slice(8)+'/'+d.data.slice(5,7);}
+ const fatAtual = Number(atual.fat_real_total || 0)
+ const fatAnterior = Number(anterior.fat_real_total || 0)
+ const crescimento = fatAnterior ? ((fatAtual - fatAnterior) / fatAnterior) * 100 : 0
 
-function buildMesBtns(cid,cb){
-  const cont=document.getElementById(cid);if(!cont)return;cont.innerHTML='';
-  Object.keys(METAS_PT).forEach(m=>{
-    const b=document.createElement('button');
-    b.className='mes-btn'+(m===mMetasSel?' active':'');
-    b.textContent=METAS_PT[m];
-    b.onclick=()=>{mMetasSel=m;cont.querySelectorAll('.mes-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');cb();};
-    cont.appendChild(b);
-  });
+ box.innerHTML = `
+ <div class="insight-item">
+ ${crescimento >= 0 ? '' : ''}
+ Faturamento mudou
+ <strong>${crescimento.toFixed(1)}%</strong>
+ vs período anterior.
+ </div>
+ `
 }
 
-function showMetasTab(t,btn){
-  ['visao','diario','canais','historico'].forEach(s=>{const el=document.getElementById('msec-'+s);if(el)el.style.display=s===t?'block':'none';});
-  document.querySelectorAll('.metas-subtab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  if(t==='visao')mRenderVisao();
-  if(t==='diario')mRenderDiario();
-  if(t==='canais')mRenderCanais();
-  if(t==='historico')mRenderHistorico();
+function renderInsightsAlertas() {
+ const box = $('insights-alertas')
+ const resumo = DATA.resumo_mensal || []
+
+ if (!box || !resumo.length) return
+
+ const atual = [...resumo].sort((a, b) => periodoParaOrdem(a.periodo) - periodoParaOrdem(b.periodo)).at(-1)
+ const meta = Number(atual.meta_total || 0)
+ const real = Number(atual.fat_real_total || 0)
+ const pct = meta ? (real / meta) * 100 : 0
+
+ let alertas = ''
+
+ if (pct < 80) {
+ alertas += `
+ <div class="insight-item">
+  Meta abaixo de 80%.
+ </div>
+ `
+ }
+
+ if (!alertas) {
+ alertas = `
+ <div class="insight-item">
+  Operação saudável.
+ </div>
+ `
+ }
+
+ box.innerHTML = alertas
 }
 
-function mRenderVisao(){
-  buildMesBtns('mes-btns-visao',mRenderVisao);
-  const dias=mGetDias(mMetasSel),sum=mGetSum(mMetasSel);
-  const realT=sum.fat_total||0,metaT=(sum.meta_total||0)>0?(sum.meta_total||0):realT;
-  const metaS=sum.meta_salao||0,metaD=sum.meta_delivery||0;
-  const realS=sum.fat_salao||0,realD=sum.fat_delivery||0;
-  const hasCanalMeta=metaS>0||metaD>0;  // false for months without canal targets
-  const diff=realT-metaT,pM=metaT?((realT/metaT)*100).toFixed(1):'100.0';
-  const lastDia=dias.length?dias[dias.length-1].data:'';
-  const refStr=lastDia?lastDia.slice(8)+'/'+lastDia.slice(5,7):'&mdash;';
-  const banner=document.getElementById('meta-banner-visao');
-  if(banner)banner.innerHTML=
-    '<div><div class="meta-banner-title">'+METAS_PT[mMetasSel]+' &mdash; Meta Total</div>'+
-    '<div style="font-size:12px;opacity:.5;margin-top:2px">'+dias.length+' dias &middot; Sal&#227;o + Delivery &middot; ref. '+refStr+'</div>'+(!hasCanalMeta?'<div style="font-size:11px;color:#FBB13C;margin-top:3px">&#9432; Sem dados de meta para este per&#237;odo &#8212; exibindo fat. real</div>':'')+'</div>'+
-    '<div class="meta-banner-items">'+
-      '<div class="meta-banner-item"><div class="lbl">Meta Acumulada</div><div class="val">'+mfmtK(metaT)+'</div></div>'+
-      '<div class="meta-banner-item"><div class="lbl">Realizado</div><div class="val '+(pM>=100?'green':'amber')+'">'+mfmtK(realT)+'</div></div>'+
-      '<div class="meta-banner-item"><div class="lbl">Diferen&ccedil;a</div><div class="val '+(diff>=0?'green':'red')+'">'+mfmtD(diff)+'</div></div>'+
-      '<div class="meta-banner-item"><div class="lbl">% Atingido</div><div class="val '+(pM>=100?'green':'amber')+'">'+pM+'%</div></div>'+
-    '</div>';
-  const avgDia=dias.length?realT/dias.length:0;
-  const best=dias.reduce((a,b)=>((b.fat_total||0)>(a.fat_total||0)?b:a),{fat_total:0,data:'',dia_semana:''});
-  const acima=dias.filter(d=>(d.fat_total||0)>=(d.meta_total||0)&&d.meta_total>0).length;
-  const mkpis=document.getElementById('mkpis-visao');
-  if(mkpis)mkpis.innerHTML=
-    '<div class="mkpi '+(pM>=100?'green':'red')+'"><div class="mkpi-l">% Atingimento</div><div class="mkpi-v '+(pM>=100?'green':'red')+'">'+pM+'%</div><div class="mkpi-s">'+mfmt(realT)+' / '+mfmt(metaT)+'</div></div>'+
-    '<div class="mkpi amber"><div class="mkpi-l">M&eacute;dia Di&aacute;ria</div><div class="mkpi-v">'+mfmtK(avgDia)+'</div><div class="mkpi-s">Meta/dia: '+mfmtK(dias.length?metaT/dias.length:0)+'</div></div>'+
-    '<div class="mkpi green"><div class="mkpi-l">Melhor Dia</div><div class="mkpi-v green">'+mfmtK(best.fat_total)+'</div><div class="mkpi-s">'+(best.data?mdl(best)+' ('+best.dia_semana+')':'&mdash;')+'</div></div>'+
-    '<div class="mkpi"><div class="mkpi-l">Dias acima da meta</div><div class="mkpi-v">'+acima+'/'+dias.length+'</div><div class="mkpi-s">'+(dias.length?((acima/dias.length)*100).toFixed(0):0)+'% dos dias</div></div>';
-  const hasC=realS>0||realD>0;
-  const pS=(metaS&&hasC)?((realS/metaS)*100).toFixed(1):'&mdash;';
-  const pD=(metaD&&hasC)?((realD/metaD)*100).toFixed(1):'&mdash;';
-  const metaSshow=hasCanalMeta?mfmt(metaS):'&mdash;';
-  const metaDshow=hasCanalMeta?mfmt(metaD):'&mdash;';
-  const mcc=document.getElementById('mcanal-cards-visao');
-  if(mcc)mcc.innerHTML=
-    '<div class="canal-card-m"><div class="canal-hdr-m"><div class="canal-hdr-title" style="color:#1E40AF">&#127968; Sal&#227;o</div></div><div class="canal-kpis-m">'+
-      '<div class="ckpi blue"><div class="ckpi-l">Meta</div><div class="ckpi-v" style="color:#1E40AF">'+metaSshow+'</div></div>'+
-      '<div class="ckpi blue"><div class="ckpi-l">Realizado</div><div class="ckpi-v" style="color:#1E40AF">'+(hasC?mfmt(realS):'&mdash;')+'</div></div>'+
-      '<div class="ckpi blue"><div class="ckpi-l">% Atingido</div><div class="ckpi-v" style="color:#1E40AF">'+pS+(pS!=='&mdash;'?'%':'')+'</div><div class="ckpi-s">'+(hasCanalMeta&&hasC?mfmtD(realS-metaS):'&mdash;')+'</div></div>'+
-    '</div></div>'+
-    '<div class="canal-card-m"><div class="canal-hdr-m"><div class="canal-hdr-title" style="color:#7C3AED">&#128667; Delivery</div></div><div class="canal-kpis-m">'+
-      '<div class="ckpi purple"><div class="ckpi-l">Meta</div><div class="ckpi-v" style="color:#7C3AED">'+metaDshow+'</div></div>'+
-      '<div class="ckpi purple"><div class="ckpi-l">Realizado</div><div class="ckpi-v" style="color:#7C3AED">'+(hasC?mfmt(realD):'&mdash;')+'</div></div>'+
-      '<div class="ckpi purple"><div class="ckpi-l">% Atingido</div><div class="ckpi-v" style="color:#7C3AED">'+pD+(pD!=='&mdash;'?'%':'')+'</div><div class="ckpi-s">'+(hasCanalMeta&&hasC?mfmtD(realD-metaD):'&mdash;')+'</div></div>'+
-    '</div></div>';
-  mdc('mchart-acumulado');
-  let cr=0,cm=0,crA=[],cmA=[];
-  dias.forEach(d=>{cr+=(d.fat_total||0);cm+=(d.meta_total||0);crA.push(cr);cmA.push(cm);});
-  const cvAc=document.getElementById('mchart-acumulado');
-  if(cvAc)mCH['mchart-acumulado']=new Chart(cvAc,{type:'line',data:{labels:dias.map(mdl),datasets:[
-    {label:'Realizado',data:crA,borderColor:'#C0392B',backgroundColor:'rgba(192,57,43,.08)',fill:true,tension:.3,borderWidth:2,pointRadius:0},
-    {label:'Expectativa acumulada',data:cmA,borderColor:'#7A7A72',borderDash:[5,5],fill:false,tension:.3,borderWidth:1.5,pointRadius:0},
-    {label:'Meta mensal',data:dias.map(()=>metaT),borderColor:'#1E40AF',borderDash:[3,6],fill:false,borderWidth:1,pointRadius:0}
-  ]},options:{responsive:true,plugins:{legend:{position:'top',labels:{font:{size:11}}}},scales:{y:{ticks:{callback:v=>mfmtK(v),font:{size:10}},grid:{color:'rgba(0,0,0,.05)'}},x:{ticks:{font:{size:10},maxTicksLimit:15},grid:{display:false}}}}});
-  mdc('mchart-diario-bar');
-  const cvBar=document.getElementById('mchart-diario-bar');
-  if(cvBar)mCH['mchart-diario-bar']=new Chart(cvBar,{type:'bar',data:{labels:dias.map(mdl),datasets:[
-    {label:'Realizado',data:dias.map(d=>d.fat_total||0),backgroundColor:'rgba(192,57,43,.8)',borderRadius:3},
-    {label:'Meta',data:dias.map(d=>d.meta_total||0),type:'line',borderColor:'#1A1A18',borderWidth:1.5,borderDash:[4,4],pointRadius:0,fill:false}
-  ]},options:{responsive:true,plugins:{legend:{position:'top',labels:{font:{size:11}}}},scales:{y:{ticks:{callback:v=>mfmtK(v),font:{size:10}},grid:{color:'rgba(0,0,0,.05)'}},x:{ticks:{font:{size:9},maxRotation:45},grid:{display:false}}}}});
+function renderInsightsProdutos() {
+ const box = $('insights-produtos')
+ const produtos = DATA.produtos || []
+
+ if (!box || !produtos.length) return
+
+ const top = [...produtos]
+ .sort((a, b) => Number(b.valor_total || 0) - Number(a.valor_total || 0))[0]
+
+ box.innerHTML = `
+ <div class="insight-item">
+  Produto destaque:
+ <strong>${top.produto}</strong>
+ com <strong>${fmtBRL(top.valor_total)}</strong>.
+ </div>
+ `
 }
 
-function mRenderDiario(){
-  buildMesBtns('mes-btns-diario',mRenderDiario);
-  const dias=mGetDias(mMetasSel),sum=mGetSum(mMetasSel);
-  const hasC=dias.some(d=>d.fat_salao>0||d.fat_delivery>0);
-  const note=document.getElementById('mnote-diario');
-  if(note)note.textContent='Dados diários de fat. total. Canal (Salão/Delivery) disponível a partir de Abr/26.';
-  const body=document.getElementById('mbody-diario');if(!body)return;body.innerHTML='';
-  let tF=0,tM=0,tP=0;
-  dias.forEach(d=>{
-    const mT=d.meta_total||0,rt=d.fat_total||0,rs=d.fat_salao||0,rd=d.fat_delivery||0;
-    const dT=rt-mT,pV=mT?((rt/mT)*100).toFixed(0):'100';
-    tF+=rt;tM+=mT;tP+=d.pessoas||0;
-    const tr=document.createElement('tr');
-    tr.innerHTML='<td>'+mdl(d)+'</td><td style="text-align:center">'+d.dia_semana+'</td>'+
-      '<td>'+(mT?mfmt(mT):'&mdash;')+'</td><td><strong>'+mfmt(rt)+'</strong></td>'+
-      '<td><span class="mbadge '+(dT>=0?'up':'dn')+'">'+mfmtD(dT)+'</span></td>'+
-      '<td><span class="mbadge '+(pV>=100?'up':pV>=80?'neu':'dn')+'">'+pV+'%</span></td>'+
-      '<td style="color:#1E40AF">'+(d.meta_salao?mfmt(d.meta_salao):'&mdash;')+'</td>'+
-      '<td style="color:#1E40AF">'+(rs?mfmt(rs):'&mdash;')+'</td>'+
-      '<td>'+(d.meta_salao&&rs?'<span class="mbadge '+(rs-d.meta_salao>=0?'up':'dn')+'">'+mfmtD(rs-d.meta_salao)+'</span>':'&mdash;')+'</td>'+
-      '<td style="color:#7C3AED">'+(d.meta_delivery?mfmt(d.meta_delivery):'&mdash;')+'</td>'+
-      '<td style="color:#7C3AED">'+(rd?mfmt(rd):'&mdash;')+'</td>'+
-      '<td>'+(d.meta_delivery&&rd?'<span class="mbadge '+(rd-d.meta_delivery>=0?'up':'dn')+'">'+mfmtD(rd-d.meta_delivery)+'</span>':'&mdash;')+'</td>'+
-      '<td>'+(d.pessoas||'&mdash;')+'</td><td>R$'+Number(d.ticket_medio||0).toFixed(0)+'</td>';
-    body.appendChild(tr);
-  });
-  const pT=tM?((tF/tM)*100).toFixed(1):'100',footer=document.getElementById('mfooter-diario');
-  if(footer)footer.innerHTML='<span>Total: '+mfmt(tF)+'</span>'+(tM?'<span>Meta: '+mfmt(tM)+'</span><span>'+pT+'%</span>':'')+
-    '<span>Pessoas: '+tP.toLocaleString('pt-BR')+'</span>';
+function renderInsightsOperacao() {
+ const box = $('insights-operacao')
+ const garcons = removerPlataformasGarcons(DATA.garcons || [])
+
+ if (!box || !garcons.length) return
+
+ const agrupado = {}
+
+ garcons.forEach(g => {
+ const nome = g.atendente || 'Sem nome'
+
+ if (!agrupado[nome]) {
+ agrupado[nome] = { atendente: nome, fat: 0 }
+ }
+
+ agrupado[nome].fat += Number(g.fat_real || 0)
+ })
+
+ const top = Object.values(agrupado).sort((a, b) => b.fat - a.fat)[0]
+
+ box.innerHTML = `
+ <div class="insight-item">
+  Garçom destaque:
+ <strong>${top.atendente}</strong>
+ com <strong>${fmtBRL(top.fat)}</strong>.
+ </div>
+ `
 }
 
-function mRenderCanais(){
-  buildMesBtns('mes-btns-canais',mRenderCanais);
-  const sum=mGetSum(mMetasSel),dias=mGetDias(mMetasSel);
-  const realS=sum.fat_salao||0,realD=sum.fat_delivery||0;
-  const metaS=sum.meta_salao||0,metaD=sum.meta_delivery||0;
-  const hasC=realS>0||realD>0;
-  const pS=(metaS&&hasC)?((realS/metaS)*100).toFixed(1):'&mdash;';
-  const pD=(metaD&&hasC)?((realD/metaD)*100).toFixed(1):'&mdash;';
-  const note=document.getElementById('mnote-canais');
-  if(note)note.textContent=hasC?'Acumulado mensal via Modo de Venda (fat. real).':'Canal disponível a partir de Abr/26.';
-  const ckS=document.getElementById('mckpis-salao');
-  if(ckS)ckS.innerHTML=
-    '<div class="ckpi blue"><div class="ckpi-l">Meta Salão</div><div class="ckpi-v" style="color:#1E40AF">'+mfmt(metaS)+'</div></div>'+
-    '<div class="ckpi blue"><div class="ckpi-l">Realizado</div><div class="ckpi-v" style="color:#1E40AF">'+(hasC?mfmt(realS):'&mdash;')+'</div><div class="ckpi-s">'+(hasC?mfmtD(realS-metaS):'&mdash;')+'</div></div>'+
-    '<div class="ckpi blue"><div class="ckpi-l">% Atingido</div><div class="ckpi-v" style="color:#1E40AF">'+pS+(pS!=='&mdash;'?'%':'')+'</div></div>';
-  const ckD=document.getElementById('mckpis-delivery');
-  if(ckD)ckD.innerHTML=
-    '<div class="ckpi purple"><div class="ckpi-l">Meta Delivery</div><div class="ckpi-v" style="color:#7C3AED">'+mfmt(metaD)+'</div></div>'+
-    '<div class="ckpi purple"><div class="ckpi-l">Realizado</div><div class="ckpi-v" style="color:#7C3AED">'+(hasC?mfmt(realD):'&mdash;')+'</div><div class="ckpi-s">'+(hasC?mfmtD(realD-metaD):'&mdash;')+'</div></div>'+
-    '<div class="ckpi purple"><div class="ckpi-l">% Atingido</div><div class="ckpi-v" style="color:#7C3AED">'+pD+(pD!=='&mdash;'?'%':'')+'</div></div>';
-  ['mchart-salao-bar','mchart-delivery-bar','mchart-proporcao'].forEach(id=>mdc(id));
-  if(!hasC)return;
-  const dc2=dias.filter(d=>d.fat_salao>0||d.fat_delivery>0),lbls=dc2.map(mdl);
-  const cvS=document.getElementById('mchart-salao-bar');
-  if(cvS&&dc2.length)mCH['mchart-salao-bar']=new Chart(cvS,{type:'bar',data:{labels:lbls,datasets:[
-    {label:'Realizado Salão',data:dc2.map(d=>d.fat_salao||0),backgroundColor:'rgba(30,64,175,.75)',borderRadius:3},
-    {label:'Meta Salão',data:dc2.map(d=>d.meta_salao||0),type:'line',borderColor:'#1E40AF',borderWidth:2,borderDash:[4,4],pointRadius:0,fill:false}
-  ]},options:{responsive:true,plugins:{legend:{position:'top',labels:{font:{size:10}}}},scales:{y:{ticks:{callback:v=>mfmtK(v),font:{size:9}}},x:{ticks:{font:{size:9},maxRotation:45},grid:{display:false}}}}});
-  const cvD=document.getElementById('mchart-delivery-bar');
-  if(cvD&&dc2.length)mCH['mchart-delivery-bar']=new Chart(cvD,{type:'bar',data:{labels:lbls,datasets:[
-    {label:'Realizado Delivery',data:dc2.map(d=>d.fat_delivery||0),backgroundColor:'rgba(124,58,237,.75)',borderRadius:3},
-    {label:'Meta Delivery',data:dc2.map(d=>d.meta_delivery||0),type:'line',borderColor:'#7C3AED',borderWidth:2,borderDash:[4,4],pointRadius:0,fill:false}
-  ]},options:{responsive:true,plugins:{legend:{position:'top',labels:{font:{size:10}}}},scales:{y:{ticks:{callback:v=>mfmtK(v),font:{size:9}}},x:{ticks:{font:{size:9},maxRotation:45},grid:{display:false}}}}});
-  const cvP=document.getElementById('mchart-proporcao');
-  if(cvP&&dc2.length)mCH['mchart-proporcao']=new Chart(cvP,{type:'bar',data:{labels:lbls,datasets:[
-    {label:'Salão %',data:dc2.map(d=>{const t=(d.fat_salao||0)+(d.fat_delivery||0);return t?+((d.fat_salao/t)*100).toFixed(1):0;}),backgroundColor:'rgba(30,64,175,.75)',borderRadius:2},
-    {label:'Delivery %',data:dc2.map(d=>{const t=(d.fat_salao||0)+(d.fat_delivery||0);return t?+((d.fat_delivery/t)*100).toFixed(1):0;}),backgroundColor:'rgba(124,58,237,.75)',borderRadius:2}
-  ]},options:{responsive:true,plugins:{legend:{position:'top',labels:{font:{size:11}}}},scales:{x:{stacked:true,ticks:{font:{size:9},maxRotation:45},grid:{display:false}},y:{stacked:true,max:100,ticks:{callback:v=>v+'%',font:{size:10}}}}}});
+function renderInsightsComparacao(
+ resumoA,
+ resumoB,
+ crescimentoPct,
+ fatDiaA,
+ fatDiaB,
+ pessoasDiaA,
+ pessoasDiaB
+) {
+ const insightsBox = $('comparar-insights')
+ const alertasBox = $('comparar-alertas')
+
+ if (!insightsBox || !alertasBox) return
+
+ const ticketA = resumoA.ticket || 0
+ const ticketB = resumoB.ticket || 0
+
+ const diffPessoasDiaPct = pessoasDiaA
+ ? ((pessoasDiaB - pessoasDiaA) / pessoasDiaA) * 100
+ : 0
+
+ const diffTicketPct = ticketA
+ ? ((ticketB - ticketA) / ticketA) * 100
+ : 0
+
+ const diffFatDiaPct = fatDiaA
+ ? ((fatDiaB - fatDiaA) / fatDiaA) * 100
+ : 0
+
+ let insights = ''
+ let alertas = ''
+
+ if (crescimentoPct > 0) {
+ insights += `
+ <div class="insight-item">
+  O período B faturou <strong>${crescimentoPct.toFixed(1)}%</strong> mais que o período A.
+ </div>
+ `
+ } else if (crescimentoPct < 0) {
+ insights += `
+ <div class="insight-item">
+  O período B faturou <strong>${Math.abs(crescimentoPct).toFixed(1)}%</strong> menos que o período A.
+ </div>
+ `
+ } else {
+ insights += `
+ <div class="insight-item">
+  O faturamento ficou praticamente estável entre os períodos.
+ </div>
+ `
+ }
+
+ if (diffPessoasDiaPct > 0 && diffTicketPct < 0) {
+ insights += `
+ <div class="insight-item">
+  O crescimento veio de maior fluxo: pessoas/dia subiram
+ <strong>${diffPessoasDiaPct.toFixed(1)}%</strong>, mas o ticket caiu
+ <strong>${Math.abs(diffTicketPct).toFixed(1)}%</strong>.
+ </div>
+ `
+ } else if (diffPessoasDiaPct > 0 && diffTicketPct > 0) {
+ insights += `
+ <div class="insight-item">
+  Crescimento saudável: pessoas/dia e ticket médio subiram juntos.
+ </div>
+ `
+ } else if (diffPessoasDiaPct < 0 && diffTicketPct > 0) {
+ insights += `
+ <div class="insight-item">
+  O ticket médio subiu, mas com menor fluxo de pessoas/dia.
+ </div>
+ `
+ } else if (diffPessoasDiaPct < 0 && diffTicketPct < 0) {
+ insights += `
+ <div class="insight-item">
+  Queda dupla: pessoas/dia e ticket médio caíram no período B.
+ </div>
+ `
+ }
+
+ if (diffFatDiaPct > 0) {
+ insights += `
+ <div class="insight-item">
+  A eficiência diária melhorou: faturamento/dia subiu
+ <strong>${diffFatDiaPct.toFixed(1)}%</strong>.
+ </div>
+ `
+ } else if (diffFatDiaPct < 0) {
+ alertas += `
+ <div class="insight-item">
+  Faturamento/dia caiu
+ <strong>${Math.abs(diffFatDiaPct).toFixed(1)}%</strong>.
+ </div>
+ `
+ }
+
+ if (crescimentoPct < -10) {
+ alertas += `
+ <div class="insight-item">
+  Queda relevante de faturamento. Vale investigar canal, produto e horário.
+ </div>
+ `
+ }
+
+ if (diffTicketPct < -8) {
+ alertas += `
+ <div class="insight-item">
+  Ticket médio caiu
+ <strong>${Math.abs(diffTicketPct).toFixed(1)}%</strong>.
+ Pode indicar mix mais barato ou maior peso de delivery/promoções.
+ </div>
+ `
+ }
+
+ if (!alertas) {
+ alertas = `
+ <div class="insight-item">
+  Nenhum alerta crítico identificado na comparação.
+ </div>
+ `
+ }
+
+ insightsBox.innerHTML = insights
+ alertasBox.innerHTML = alertas
 }
 
-function mRenderHistorico(){
-  const lbls=METAS_MONTHLY.map(m=>METAS_PT[m.mes]||m.mes);
-  mdc('mchart-hist-fat');
-  const cvHF=document.getElementById('mchart-hist-fat');
-  if(cvHF)mCH['mchart-hist-fat']=new Chart(cvHF,{type:'bar',data:{labels:lbls,datasets:[
-    {label:'Fat. Real',data:METAS_MONTHLY.map(m=>m.fat_total||0),backgroundColor:'rgba(192,57,43,.75)',borderRadius:4},
-    {label:'Meta',data:METAS_MONTHLY.map(m=>m.meta_total||0),type:'line',borderColor:'#0D0D0D',borderWidth:2,borderDash:[6,4],pointRadius:3,fill:false}
-  ]},options:{responsive:true,plugins:{legend:{position:'top',labels:{font:{size:11}}}},scales:{y:{ticks:{callback:v=>mfmtK(v),font:{size:10}},grid:{color:'rgba(0,0,0,.05)'}},x:{ticks:{font:{size:10}},grid:{display:false}}}}});
-  mdc('mchart-hist-pct');
-  const pcts=METAS_MONTHLY.map(m=>m.meta_total?+((m.fat_total/m.meta_total)*100).toFixed(1):100);
-  const cvHP=document.getElementById('mchart-hist-pct');
-  if(cvHP)mCH['mchart-hist-pct']=new Chart(cvHP,{type:'bar',data:{labels:lbls,datasets:[{label:'% Meta',data:pcts,backgroundColor:pcts.map(p=>p>=100?'rgba(45,106,79,.75)':p>=90?'rgba(183,121,31,.75)':'rgba(192,57,43,.75)'),borderRadius:4}]},
-    options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.raw+'%'}}},scales:{y:{min:80,max:135,ticks:{callback:v=>v+'%',font:{size:10}},grid:{color:'rgba(0,0,0,.05)'}},x:{ticks:{font:{size:10}},grid:{display:false}}}}});
-  mdc('mchart-hist-evol');
-  const cvHE=document.getElementById('mchart-hist-evol');
-  if(cvHE)mCH['mchart-hist-evol']=new Chart(cvHE,{type:'line',data:{labels:lbls,datasets:[{label:'Faturamento',data:METAS_MONTHLY.map(m=>m.fat_total||0),borderColor:'#C0392B',backgroundColor:'rgba(192,57,43,.08)',fill:true,tension:.3,borderWidth:2,pointRadius:4,pointBackgroundColor:'#C0392B'}]},
-    options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>mfmtK(v),font:{size:10}},grid:{color:'rgba(0,0,0,.05)'}},x:{ticks:{font:{size:10}},grid:{display:false}}}}});
-  const body=document.getElementById('mbody-historico');if(!body)return;body.innerHTML='';
-  METAS_MONTHLY.forEach(m=>{
-    const diff=(m.fat_total||0)-(m.meta_total||0),pV=m.meta_total?(((m.fat_total||0)/m.meta_total)*100).toFixed(1):'100';
-    const avg=m.dias?((m.fat_total||0)/m.dias):0;
-    const tr=document.createElement('tr');
-    tr.innerHTML='<td><strong>'+(METAS_PT[m.mes]||m.mes)+'</strong></td><td>'+mfmt(m.fat_total)+'</td><td>'+mfmt(m.meta_total)+'</td>'+
-      '<td style="color:#1E40AF">'+mfmt(m.meta_salao)+'</td><td style="color:#7C3AED">'+mfmt(m.meta_delivery)+'</td>'+
-      '<td><span class="mbadge '+(diff>=0?'up':'dn')+'">'+mfmtD(diff)+'</span></td>'+
-      '<td><span class="mbadge '+(pV>=100?'up':pV>=90?'neu':'dn')+'">'+pV+'%</span></td>'+
-      '<td style="text-align:center">'+m.dias+'</td><td>'+mfmt(avg)+'</td><td>'+Number(m.pessoas||0).toLocaleString('pt-BR')+'</td>';
-    body.appendChild(tr);
-  });
+function renderInsightsGerais() {
+ if (!$('insights-gerais-resumo')) return
+
+ renderInsightsGeraisResumo()
+ renderInsightsGeraisAlertas()
+ renderInsightsGeraisProdutos()
+ renderInsightsGeraisOperacao()
 }
 
-const PIZZA_GRUPOS_SET=new Set(['Pizzas Grandes','Pizza Família','Pizza Pequena','Pizza Média']);
-const CRESC_COLORS=['#C0392B','#1E40AF','#2D6A4F','#7C3AED','#B7791F','#0D9488'];
+function getDadosInsightsFiltrados() {
+ const dados = DATA.resumo_mensal || []
 
-function setTamFilter(tam,btn){
-  crescTamFilter=tam;
-  document.querySelectorAll('.tam-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');renderCrescimento();
+ if (filtroInsights === 'todos') return dados
+
+ return dados.filter(item =>
+ periodoEquivalente(item.periodo, filtroInsights)
+ )
 }
 
-function renderCrescimento(){
-  const searchEl=document.getElementById('cresc-search');
-  const search=searchEl?(searchEl.value||'').toLowerCase().trim():'';
-  let prods=PRODUTOS_HIST.filter(p=>PIZZA_GRUPOS_SET.has(p.grupo));
-  if(crescTamFilter)prods=prods.filter(p=>p.tamanho===crescTamFilter);
-  if(search)prods=prods.filter(p=>p.material.toLowerCase().includes(search));
-  const meses=[...new Set(PRODUTOS_HIST.filter(p=>PIZZA_GRUPOS_SET.has(p.grupo)).map(p=>p.mes))].sort();
-  const mesesLbl=meses.map(m=>METAS_PT[m]||m);
-  const agg={};
-  prods.forEach(p=>{
-    if(!agg[p.material])agg[p.material]={material:p.material,tamanho:p.tamanho,byMes:{},total:0};
-    agg[p.material].byMes[p.mes]=(agg[p.material].byMes[p.mes]||0)+p.qtd;
-    agg[p.material].total+=p.qtd;
-  });
-  const sabores=Object.values(agg).sort((a,b)=>b.total-a.total);
-  const totalQtd=sabores.reduce((s,x)=>s+x.total,0);
-  const primeiro=meses[0],ultimo=meses[meses.length-1];
-  const q0=sabores.reduce((s,x)=>s+(x.byMes[primeiro]||0),0);
-  const qN=sabores.reduce((s,x)=>s+(x.byMes[ultimo]||0),0);
-  const crescPct=q0?((qN/q0-1)*100).toFixed(1):'&mdash;';
-  const ckpis=document.getElementById('cresc-kpis');
-  if(ckpis)ckpis.innerHTML=
-    '<div class="mkpi"><div class="mkpi-l">Sabores &#250;nicos</div><div class="mkpi-v">'+sabores.length+'</div><div class="mkpi-s">'+(crescTamFilter||'Todos os tamanhos')+'</div></div>'+
-    '<div class="mkpi amber"><div class="mkpi-l">Total vendido</div><div class="mkpi-v">'+Math.round(totalQtd).toLocaleString('pt-BR')+'</div><div class="mkpi-s">pizzas no per&#237;odo</div></div>'+
-    '<div class="mkpi '+(crescPct!=='&mdash;'&&crescPct>=0?'green':'red')+'"><div class="mkpi-l">Crescimento '+(METAS_PT[primeiro]||primeiro)+' &#8594; '+(METAS_PT[ultimo]||ultimo)+'</div><div class="mkpi-v '+(crescPct!=='&mdash;'&&crescPct>=0?'green':'red')+'">'+(crescPct!=='&mdash;'?(crescPct>=0?'+':'')+crescPct+'%':'&mdash;')+'</div></div>';
-  mdc('chart-cresc-evol');
-  const top6=sabores.slice(0,6),cvCE=document.getElementById('chart-cresc-evol');
-  if(cvCE&&top6.length)mCH['chart-cresc-evol']=new Chart(cvCE,{type:'line',data:{labels:mesesLbl,
-    datasets:top6.map((s,i)=>{return{label:s.material,data:meses.map(m=>+(s.byMes[m]||0).toFixed(1)),borderColor:CRESC_COLORS[i],backgroundColor:CRESC_COLORS[i]+'22',fill:false,tension:.3,borderWidth:2,pointRadius:3}})
-  },options:{responsive:true,plugins:{legend:{position:'top',labels:{font:{size:10},boxWidth:12}}},scales:{y:{ticks:{font:{size:10}},grid:{color:'rgba(0,0,0,.05)'}},x:{ticks:{font:{size:10}},grid:{display:false}}}}});
-  const crescRank=sabores.map(s=>{return{material:s.material,cresc:(s.byMes[ultimo]||0)-(s.byMes[primeiro]||0)}}).sort((a,b)=>b.cresc-a.cresc).slice(0,12);
-  const maxC=Math.max(...crescRank.map(x=>Math.abs(x.cresc)),1);
-  const rankEl=document.getElementById('chart-cresc-rank');
-  if(rankEl)rankEl.innerHTML=crescRank.map(s=>{
-    const pct=((Math.abs(s.cresc)/maxC)*100).toFixed(1),cls=s.cresc>=0?'green':'red';
-    return'<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px"><div style="width:140px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+s.material+'">'+s.material+'</div>'+
-      '<div style="flex:1;background:var(--b1);border-radius:3px;height:18px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:'+(cls==='green'?'rgba(45,106,79,.7)':'rgba(192,57,43,.7)')+';border-radius:3px"></div></div>'+
-      '<div style="width:55px;text-align:right;font-size:11px;font-weight:600;color:'+(cls==='green'?'#2D6A4F':'var(--red)')+'">'+(s.cresc>=0?'+':'')+Math.round(s.cresc)+'</div></div>';
-  }).join('');
-  const top12=sabores.slice(0,12),maxT=Math.max(...top12.map(x=>x.total),1);
-  const topEl=document.getElementById('chart-cresc-top');
-  if(topEl)topEl.innerHTML=top12.map((s,i)=>{
-    const pct=((s.total/maxT)*100).toFixed(1);
-    return'<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px"><div style="width:20px;text-align:center;font-size:11px;font-weight:700;color:'+(i<3?'var(--red)':'var(--ink3)')+'">'+( i+1)+'</div>'+
-      '<div style="width:130px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+s.material+'">'+s.material+'</div>'+
-      '<div style="flex:1;background:var(--b1);border-radius:3px;height:18px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:rgba(192,57,43,.7);border-radius:3px"></div></div>'+
-      '<div style="width:45px;text-align:right;font-size:11px;font-weight:600">'+Math.round(s.total)+'</div></div>';
-  }).join('');
-  const titleEl=document.getElementById('cresc-tbl-title');
-  if(titleEl)titleEl.textContent='Histórico mensal — '+(search?'"'+search+'"':(crescTamFilter||'Todos'))+' (Top 15)';
-  const head=document.getElementById('cresc-tbl-head');
-  if(head)head.innerHTML='<th style="text-align:left;background:var(--black);color:#fff;padding:8px 12px;font-size:11px">Sabor</th>'+
-    '<th style="background:var(--black);color:#fff;padding:8px 12px;font-size:11px;text-align:center">Tam.</th>'+
-    meses.map(m=>'<th style="background:var(--black);color:#fff;padding:8px 10px;font-size:10px;text-align:right;white-space:nowrap">'+(METAS_PT[m]||m)+'</th>').join('')+
-    '<th style="background:var(--black);color:#fff;padding:8px 12px;font-size:11px;text-align:right">Total</th>';
-  const tbody=document.getElementById('cresc-tbl-body');if(!tbody)return;tbody.innerHTML='';
-  const tamC={GR:'rgba(192,57,43,.15)',FM:'rgba(124,58,237,.15)',PQ:'rgba(30,64,175,.15)',MD:'rgba(183,121,31,.15)'};
-  sabores.slice(0,15).forEach(s=>{
-    const maxM=Math.max(...meses.map(m=>s.byMes[m]||0),1);
-    const tr=document.createElement('tr');
-    tr.innerHTML='<td style="font-size:12px;font-weight:500;padding:6px 12px;white-space:nowrap">'+s.material+'</td>'+
-      '<td style="text-align:center;padding:6px 8px"><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:8px;background:'+(tamC[s.tamanho]||'rgba(0,0,0,.05)')+'">'+s.tamanho+'</span></td>'+
-      meses.map(m=>{const v=s.byMes[m]||0;const op=(v/maxM*0.3).toFixed(2);return'<td style="text-align:right;padding:6px 10px;font-size:12px;background:'+(v?'rgba(192,57,43,'+op+')':'transparent')+'">'+( v?Math.round(v):'')+'</td>';}).join('')+
-      '<td style="text-align:right;padding:6px 12px;font-size:12px;font-weight:600">'+Math.round(s.total)+'</td>';
-    tbody.appendChild(tr);
-  });
+function renderInsightsGeraisResumo() {
+ const box = $('insights-gerais-resumo')
+ const resumo = getDadosInsightsFiltrados()
+
+ if (!box || !resumo.length) return
+
+ const ordenado = [...resumo].sort((a, b) => periodoParaOrdem(a.periodo) - periodoParaOrdem(b.periodo))
+ const ultimo = ordenado.at(-1)
+ const anterior = ordenado.at(-2)
+
+ const maiorMes = [...ordenado]
+ .sort((a, b) => Number(b.fat_real_total || 0) - Number(a.fat_real_total || 0))[0]
+
+ let crescimentoHtml = ''
+
+ if (anterior) {
+ const atualFat = Number(ultimo.fat_real_total || 0)
+ const anteriorFat = Number(anterior.fat_real_total || 0)
+ const crescimento = anteriorFat ? ((atualFat - anteriorFat) / anteriorFat) * 100 : 0
+
+ crescimentoHtml = `
+ <div class="insight-item">
+ ${crescimento >= 0 ? '' : ''}
+ Último período (${ultimo.periodo}) teve variação de
+ <strong>${crescimento.toFixed(1)}%</strong>
+ vs ${anterior.periodo}.
+ </div>
+ `
+ }
+
+ box.innerHTML = `
+ <div class="insight-item">
+  Melhor período:
+ <strong>${maiorMes.periodo}</strong>
+ com <strong>${fmtBRL(maiorMes.fat_real_total)}</strong>.
+ </div>
+
+ <div class="insight-item">
+  Último período carregado:
+ <strong>${ultimo.periodo}</strong>
+ com <strong>${fmtBRL(ultimo.fat_real_total)}</strong>.
+ </div>
+
+ ${crescimentoHtml}
+ `
 }
 
-mRenderVisao();
+function renderInsightsGeraisAlertas() {
+ const box = $('insights-gerais-alertas')
+ const resumo = getDadosInsightsFiltrados()
 
-</script>
+ if (!box || !resumo.length) return
+
+ const ultimo = [...resumo]
+ .sort((a, b) => periodoParaOrdem(a.periodo) - periodoParaOrdem(b.periodo))
+ .at(-1)
+
+ const meta = Number(ultimo.meta_total || 0)
+ const real = Number(ultimo.fat_real_total || 0)
+ const pctMeta = meta ? (real / meta) * 100 : 0
+
+ let alertas = ''
+
+ if (pctMeta < 80) {
+ alertas += `
+ <div class="insight-item">
+  Meta em risco: último período está em
+ <strong>${pctMeta.toFixed(1)}%</strong>
+ da meta.
+ </div>
+ `
+ } else if (pctMeta < 100) {
+ alertas += `
+ <div class="insight-item">
+  Meta ainda nÃo batida: último período está em
+ <strong>${pctMeta.toFixed(1)}%</strong>.
+ </div>
+ `
+ }
+
+ if (!alertas) {
+ alertas = `
+ <div class="insight-item">
+  Nenhum alerta geral crítico identificado.
+ </div>
+ `
+ }
+
+ box.innerHTML = alertas
+}
+
+function renderInsightsGeraisProdutos() {
+ const box = $('insights-gerais-produtos')
+ const produtos = DATA.produtos || []
+
+ if (!box || !produtos.length) return
+
+ const agrupado = {}
+
+ produtos.forEach(p => {
+ const nome = p.produto || 'Sem produto'
+
+ if (!agrupado[nome]) {
+ agrupado[nome] = { produto: nome, quantidade: 0, valor_total: 0 }
+ }
+
+ agrupado[nome].quantidade += Number(p.quantidade || 0)
+ agrupado[nome].valor_total += Number(p.valor_total || 0)
+ })
+
+ const ranking = Object.values(agrupado)
+ .sort((a, b) => b.valor_total - a.valor_total)
+
+ const topFat = ranking[0]
+ const topQtd = [...ranking].sort((a, b) => b.quantidade - a.quantidade)[0]
+
+ box.innerHTML = `
+ <div class="insight-item">
+  Produto com maior faturamento:
+ <strong>${topFat.produto}</strong>
+ com <strong>${fmtBRL(topFat.valor_total)}</strong>.
+ </div>
+
+ <div class="insight-item">
+  Produto mais vendido em quantidade:
+ <strong>${topQtd.produto}</strong>
+ com <strong>${fmtNum(topQtd.quantidade)}</strong> unidades.
+ </div>
+ `
+}
+
+function renderInsightsGeraisOperacao() {
+ const box = $('insights-gerais-operacao')
+ const garcons = removerPlataformasGarcons(DATA.garcons || [])
+ const horarios = DATA.horarios || []
+
+ if (!box) return
+
+ let html = ''
+
+ if (garcons.length) {
+ const agrupado = {}
+
+ garcons.forEach(g => {
+ const nome = g.atendente || 'Sem nome'
+
+ if (!agrupado[nome]) {
+ agrupado[nome] = { atendente: nome, fat: 0, qtd: 0 }
+ }
+
+ agrupado[nome].fat += Number(g.fat_real || 0)
+ agrupado[nome].qtd += Number(g.quantidade || 0)
+ })
+
+ const top = Object.values(agrupado)
+ .sort((a, b) => b.fat - a.fat)[0]
+
+ html += `
+ <div class="insight-item">
+  Atendente líder:
+ <strong>${top.atendente}</strong>
+ com <strong>${fmtBRL(top.fat)}</strong>.
+ </div>
+ `
+ }
+
+ if (horarios.length) {
+ const agrupadoHora = {}
+
+ horarios.forEach(h => {
+ const hora = normalizarHora(h.hora)
+
+ if (!agrupadoHora[hora]) {
+ agrupadoHora[hora] = { hora, fat: 0, pessoas: 0 }
+ }
+
+ agrupadoHora[hora].fat += Number(h.fat_real || 0)
+ agrupadoHora[hora].pessoas += Number(h.pessoas || 0)
+ })
+
+ const topHora = Object.values(agrupadoHora)
+ .sort((a, b) => b.fat - a.fat)[0]
+
+ html += `
+ <div class="insight-item">
+  Horário mais forte:
+ <strong>${topHora.hora}h</strong>
+ com <strong>${fmtBRL(topHora.fat)}</strong>.
+ </div>
+ `
+ }
+
+ if (!html) {
+ html = `
+ <div class="insight-item">
+ Sem dados operacionais suficientes.
+ </div>
+ `
+ }
+
+ box.innerHTML = html
+}
+
+init()
